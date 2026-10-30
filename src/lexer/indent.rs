@@ -98,7 +98,10 @@ mod tests {
         tracker.feed(4, span).unwrap();
         let res = tracker.feed(3, span);
         assert!(res.is_err());
-        assert_eq!(res.unwrap_err().message, "indentation width 3 matches no open level");
+        assert_eq!(
+            res.unwrap_err().message,
+            "indentation width 3 matches no open level"
+        );
     }
 
     #[test]

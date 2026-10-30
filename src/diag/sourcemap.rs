@@ -84,7 +84,10 @@ impl SourceMap {
             return None;
         }
 
-        let line_end = text[line_start..].find('\n').map(|i| line_start + i).unwrap_or(text.len());
+        let line_end = text[line_start..]
+            .find('\n')
+            .map(|i| line_start + i)
+            .unwrap_or(text.len());
         if target_offset > line_end {
             return None;
         }
@@ -190,7 +193,12 @@ mod tests {
 
         for offset in 0..=sm.source(id).len() {
             let (line, col) = sm.line_col(id, offset);
-            assert_eq!(sm.offset_at(id, line, col), Some(offset), "failed at offset {}", offset);
+            assert_eq!(
+                sm.offset_at(id, line, col),
+                Some(offset),
+                "failed at offset {}",
+                offset
+            );
         }
     }
 

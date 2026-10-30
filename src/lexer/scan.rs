@@ -1,5 +1,5 @@
+use super::{LexError, Op, TokKind, Token, indent::IndentTracker, literal, symbol};
 use crate::diag::Span;
-use super::{LexError, Token, TokKind, Op, indent::IndentTracker, literal, symbol};
 
 /// Scan the whole file. TODO(task 01): drive symbol/literal scanners and
 /// emit Newline / Indent / Dedent around lines.
@@ -118,7 +118,10 @@ pub fn scan_tokens(src: &str) -> Result<Vec<Token>, LexError> {
                 i += 1;
             }
             let s = &src[start..i];
-            tokens.push(Token::new(TokKind::Ident(s.to_string()), Span::new(start, i)));
+            tokens.push(Token::new(
+                TokKind::Ident(s.to_string()),
+                Span::new(start, i),
+            ));
             continue;
         }
         if b == b'f' && i + 1 < len && bytes[i + 1] == b'"' {
@@ -209,7 +212,10 @@ mod tests {
         let src = "a\n\tb\n";
         let res = scan_tokens(src);
         assert!(res.is_err());
-        assert_eq!(res.unwrap_err().message, "tabs are not allowed in indentation");
+        assert_eq!(
+            res.unwrap_err().message,
+            "tabs are not allowed in indentation"
+        );
     }
 
     #[test]

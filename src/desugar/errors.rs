@@ -81,61 +81,62 @@ fn rewrite_block(block: Block, counter: &mut u32) -> Block {
 
         if let StmtKind::Expr(expr) = &stmt.kind
             && let ExprKind::Propagate(inner) = &expr.kind
-                && let ExprKind::Call { .. } = &inner.kind
-                    && i + 1 < block.stmts.len() {
-                        let handler_stmt = block.stmts[i + 1].clone();
-                        let rewritten_inner = rewrite_expr(inner, counter);
-                        let rewritten_handler = rewrite_stmt(&handler_stmt, counter);
+            && let ExprKind::Call { .. } = &inner.kind
+            && i + 1 < block.stmts.len()
+        {
+            let handler_stmt = block.stmts[i + 1].clone();
+            let rewritten_inner = rewrite_expr(inner, counter);
+            let rewritten_handler = rewrite_stmt(&handler_stmt, counter);
 
-                        let tmp_name = format!("__err_{}", counter);
-                        *counter += 1;
-                        let tmp = Expr {
-                            kind: ExprKind::Name(name_with_span(&tmp_name, expr.span)),
-                            span: expr.span,
-                        };
+            let tmp_name = format!("__err_{}", counter);
+            *counter += 1;
+            let tmp = Expr {
+                kind: ExprKind::Name(name_with_span(&tmp_name, expr.span)),
+                span: expr.span,
+            };
 
-                        let assign = Stmt {
-                            kind: StmtKind::Assign {
-                                target: tmp.clone(),
-                                value: rewritten_inner,
-                            },
-                            span: expr.span,
-                        };
+            let assign = Stmt {
+                kind: StmtKind::Assign {
+                    target: tmp.clone(),
+                    value: rewritten_inner,
+                },
+                span: expr.span,
+            };
 
-                        let cond = make_is_error_call(tmp.clone(), expr.span);
+            let cond = make_is_error_call(tmp.clone(), expr.span);
 
-                        let then_block = Block {
-                            stmts: vec![rewritten_handler],
-                            span: handler_stmt.span,
-                        };
+            let then_block = Block {
+                stmts: vec![rewritten_handler],
+                span: handler_stmt.span,
+            };
 
-                        let else_block = Block {
-                            stmts: vec![Stmt {
-                                kind: StmtKind::Expr(tmp.clone()),
-                                span: inner.span,
-                            }],
-                            span: inner.span,
-                        };
+            let else_block = Block {
+                stmts: vec![Stmt {
+                    kind: StmtKind::Expr(tmp.clone()),
+                    span: inner.span,
+                }],
+                span: inner.span,
+            };
 
-                        let if_expr = Expr {
-                            kind: ExprKind::If {
-                                cond: Box::new(cond),
-                                then: then_block,
-                                elifs: vec![],
-                                else_: Some(else_block),
-                            },
-                            span: expr.span,
-                        };
+            let if_expr = Expr {
+                kind: ExprKind::If {
+                    cond: Box::new(cond),
+                    then: then_block,
+                    elifs: vec![],
+                    else_: Some(else_block),
+                },
+                span: expr.span,
+            };
 
-                        stmts.push(assign);
-                        stmts.push(Stmt {
-                            kind: StmtKind::Expr(if_expr),
-                            span: expr.span,
-                        });
+            stmts.push(assign);
+            stmts.push(Stmt {
+                kind: StmtKind::Expr(if_expr),
+                span: expr.span,
+            });
 
-                        i += 2;
-                        continue;
-                    }
+            i += 2;
+            continue;
+        }
 
         stmts.push(rewrite_stmt(stmt, counter));
         i += 1;
@@ -350,7 +351,7 @@ fn make_is_error_call(arg: Expr, span: Span) -> Expr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::item::{Item, ItemKind, FnDef, Name};
+    use crate::ast::item::{FnDef, Item, ItemKind, Name};
 
     use crate::diag::Span;
 
@@ -359,25 +360,37 @@ mod tests {
     }
 
     fn name(text: &str) -> Name {
-        Name { text: text.to_string(), span: span() }
+        Name {
+            text: text.to_string(),
+            span: span(),
+        }
     }
 
     fn expr_name(text: &str) -> Expr {
-        Expr { kind: ExprKind::Name(name(text)), span: span() }
+        Expr {
+            kind: ExprKind::Name(name(text)),
+            span: span(),
+        }
     }
 
     fn expr_call(callee: Expr, args: Vec<Expr>) -> Expr {
         Expr {
             kind: ExprKind::Call {
                 callee: Box::new(callee),
-                args: args.into_iter().map(|value| Arg { name: None, value }).collect(),
+                args: args
+                    .into_iter()
+                    .map(|value| Arg { name: None, value })
+                    .collect(),
             },
             span: span(),
         }
     }
 
     fn stmt_expr(e: Expr) -> Stmt {
-        Stmt { kind: StmtKind::Expr(e), span: span() }
+        Stmt {
+            kind: StmtKind::Expr(e),
+            span: span(),
+        }
     }
 
     fn item_fn(name_str: &str, body: Block) -> Item {
@@ -398,8 +411,14 @@ mod tests {
     fn test_plain_propagate() {
         // fn test() { x! }
         let call_x = expr_name("x");
-        let prop = Expr { kind: ExprKind::Propagate(Box::new(call_x)), span: span() };
-        let body = Block { stmts: vec![stmt_expr(prop)], span: span() };
+        let prop = Expr {
+            kind: ExprKind::Propagate(Box::new(call_x)),
+            span: span(),
+        };
+        let body = Block {
+            stmts: vec![stmt_expr(prop)],
+            span: span(),
+        };
         let items = vec![item_fn("test", body)];
 
         let rewritten = rewrite(items);
@@ -407,25 +426,44 @@ mod tests {
             assert_eq!(f.body.stmts.len(), 1);
             let s1 = &f.body.stmts[0];
 
-            if let StmtKind::Expr(Expr { kind: ExprKind::If { cond, then, elifs, else_ }, .. }) = &s1.kind {
+            if let StmtKind::Expr(Expr {
+                kind:
+                    ExprKind::If {
+                        cond,
+                        then,
+                        elifs,
+                        else_,
+                    },
+                ..
+            }) = &s1.kind
+            {
                 assert!(elifs.is_empty());
                 assert!(else_.is_none());
 
                 // cond should be true
                 if let ExprKind::Bool(b) = &cond.kind {
                     assert!(*b);
-                } else { panic!("not true"); }
+                } else {
+                    panic!("not true");
+                }
 
                 assert_eq!(then.stmts.len(), 3);
-            } else { panic!("not if"); }
-        } else { panic!("not fn"); }
+            } else {
+                panic!("not if");
+            }
+        } else {
+            panic!("not fn");
+        }
     }
 
     #[test]
     fn test_handler_sibling() {
         // fn test() { f()! \n handler() }
         let f_call = expr_call(expr_name("f"), vec![]);
-        let prop = Expr { kind: ExprKind::Propagate(Box::new(f_call)), span: span() };
+        let prop = Expr {
+            kind: ExprKind::Propagate(Box::new(f_call)),
+            span: span(),
+        };
         let handler = expr_call(expr_name("handler"), vec![]);
 
         let body = Block {
@@ -441,13 +479,26 @@ mod tests {
             // first is Assign
             if let StmtKind::Assign { .. } = &f.body.stmts[0].kind {
                 // ok
-            } else { panic!("not assign"); }
+            } else {
+                panic!("not assign");
+            }
 
             // second is If
-            if let StmtKind::Expr(Expr { kind: ExprKind::If { then, else_: Some(el), .. }, .. }) = &f.body.stmts[1].kind {
+            if let StmtKind::Expr(Expr {
+                kind:
+                    ExprKind::If {
+                        then,
+                        else_: Some(el),
+                        ..
+                    },
+                ..
+            }) = &f.body.stmts[1].kind
+            {
                 assert_eq!(then.stmts.len(), 1);
                 assert_eq!(el.stmts.len(), 1);
-            } else { panic!("not if-else"); }
+            } else {
+                panic!("not if-else");
+            }
         }
     }
 }

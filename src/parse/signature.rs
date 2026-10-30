@@ -1,8 +1,8 @@
 use crate::ast::item::{Name, Param};
 use crate::ast::ty::TypeRepr;
 
-use super::util::Parser;
 use super::ParseError;
+use super::util::Parser;
 
 /// A parsed declaration signature: `name [generics] params -> ret`.
 #[derive(Debug, Clone, PartialEq)]

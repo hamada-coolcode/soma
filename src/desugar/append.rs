@@ -110,14 +110,21 @@ fn walk_expr(expr: &mut Expr) {
         ExprKind::Lambda { body, .. } => {
             walk_expr(body);
         }
-        ExprKind::Comprehension { expr: c_expr, iter, .. } => {
+        ExprKind::Comprehension {
+            expr: c_expr, iter, ..
+        } => {
             walk_expr(c_expr);
             walk_expr(iter);
         }
         ExprKind::Propagate(e) => {
             walk_expr(e);
         }
-        ExprKind::If { cond, then, elifs, else_ } => {
+        ExprKind::If {
+            cond,
+            then,
+            elifs,
+            else_,
+        } => {
             walk_expr(cond);
             walk_block(then);
             for (c, b) in elifs {
@@ -139,7 +146,12 @@ fn walk_expr(expr: &mut Expr) {
     }
 
     // Rewrite if it's an Add binary operator
-    if let ExprKind::Binary { op: BinOp::Add, lhs, rhs } = &mut expr.kind {
+    if let ExprKind::Binary {
+        op: BinOp::Add,
+        lhs,
+        rhs,
+    } = &mut expr.kind
+    {
         // The rule from the brief:
         // "Since types aren't available yet, use this rule: rewrite lhs if it is NOT ExprKind::Int/Float."
         // We also do not rewrite when LHS is a string literal.

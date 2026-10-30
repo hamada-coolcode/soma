@@ -1,9 +1,9 @@
-use crate::ast::ty::{TypeKind, TypeRepr};
 use crate::ast::expr::{Expr, ExprKind};
+use crate::ast::ty::{TypeKind, TypeRepr};
 use crate::lexer::{Op, TokKind};
 
-use super::util::Parser;
 use super::ParseError;
+use super::util::Parser;
 
 /// Parse a type: `int`, `T[]`, `int[10]`, `T?`, `(int) int`, `Stack[T]`,
 /// `MathError!int`, or bare `!`.
@@ -133,11 +133,11 @@ fn parse_primary(p: &mut Parser<'_>) -> Result<TypeRepr, ParseError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::ty::{TypeKind, TypeRepr};
     use crate::ast::expr::{Expr, ExprKind};
     use crate::ast::item::Name;
-    use crate::lexer::{Op, Token};
+    use crate::ast::ty::{TypeKind, TypeRepr};
     use crate::diag::Span;
+    use crate::lexer::{Op, Token};
 
     fn parse_ty(toks: &[Token]) -> Result<TypeRepr, ParseError> {
         let mut p = Parser::new(toks);
@@ -174,15 +174,13 @@ mod tests {
             TypeRepr {
                 kind: TypeKind::Named {
                     name: Name::new("Stack".to_string(), Span::default()),
-                    generics: vec![
-                        TypeRepr {
-                            kind: TypeKind::Named {
-                                name: Name::new("int".to_string(), Span::default()),
-                                generics: vec![],
-                            },
-                            span: Span::default(),
-                        }
-                    ],
+                    generics: vec![TypeRepr {
+                        kind: TypeKind::Named {
+                            name: Name::new("int".to_string(), Span::default()),
+                            generics: vec![],
+                        },
+                        span: Span::default(),
+                    }],
                 },
                 span: Span::default(),
             }
@@ -247,10 +245,7 @@ mod tests {
 
     #[test]
     fn test_optional_type() {
-        let toks = vec![
-            Token::ident("T"),
-            Token::op(Op::Question),
-        ];
+        let toks = vec![Token::ident("T"), Token::op(Op::Question)];
         let ty = parse_ty(&toks).unwrap();
         assert_eq!(
             ty,
@@ -280,15 +275,13 @@ mod tests {
             ty,
             TypeRepr {
                 kind: TypeKind::Fn {
-                    params: vec![
-                        TypeRepr {
-                            kind: TypeKind::Named {
-                                name: Name::new("int".to_string(), Span::default()),
-                                generics: vec![],
-                            },
-                            span: Span::default(),
-                        }
-                    ],
+                    params: vec![TypeRepr {
+                        kind: TypeKind::Named {
+                            name: Name::new("int".to_string(), Span::default()),
+                            generics: vec![],
+                        },
+                        span: Span::default(),
+                    }],
                     ret: Box::new(TypeRepr {
                         kind: TypeKind::Named {
                             name: Name::new("int".to_string(), Span::default()),
@@ -363,21 +356,19 @@ mod tests {
             TypeRepr {
                 kind: TypeKind::Named {
                     name: Name::new("Stack".to_string(), Span::default()),
-                    generics: vec![
-                        TypeRepr {
-                            kind: TypeKind::Array {
-                                elem: Box::new(TypeRepr {
-                                    kind: TypeKind::Named {
-                                        name: Name::new("int".to_string(), Span::default()),
-                                        generics: vec![],
-                                    },
-                                    span: Span::default(),
-                                }),
-                                size: None,
-                            },
-                            span: Span::default(),
-                        }
-                    ],
+                    generics: vec![TypeRepr {
+                        kind: TypeKind::Array {
+                            elem: Box::new(TypeRepr {
+                                kind: TypeKind::Named {
+                                    name: Name::new("int".to_string(), Span::default()),
+                                    generics: vec![],
+                                },
+                                span: Span::default(),
+                            }),
+                            size: None,
+                        },
+                        span: Span::default(),
+                    }],
                 },
                 span: Span::default(),
             }
@@ -460,10 +451,7 @@ mod tests {
 
     #[test]
     fn test_invalid_array_start() {
-        let toks = vec![
-            Token::op(Op::LBracket),
-            Token::op(Op::RBracket),
-        ];
+        let toks = vec![Token::op(Op::LBracket), Token::op(Op::RBracket)];
         let res = parse_ty(&toks);
         assert!(res.is_err());
     }

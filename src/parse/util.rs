@@ -8,11 +8,18 @@ use super::ParseError;
 pub struct Parser<'a> {
     pub toks: &'a [Token],
     pub pos: usize,
+    /// Lambdas are `x => e`, which collides with `if cond => body`.
+    /// Cleared while parsing an `if`/`elif` condition.
+    pub allow_lambda: bool,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(toks: &'a [Token]) -> Self {
-        Self { toks, pos: 0 }
+        Self {
+            toks,
+            pos: 0,
+            allow_lambda: true,
+        }
     }
 
     pub fn peek(&self) -> Option<&'a Token> {

@@ -67,7 +67,10 @@ fn check_file(path: &Path, content: &str) -> Vec<String> {
     if !content.ends_with('\n') {
         errors.push(format!("{}: file must end with a newline", display_path));
     } else if content.ends_with("\n\n") {
-        errors.push(format!("{}: file must end with exactly one newline", display_path));
+        errors.push(format!(
+            "{}: file must end with exactly one newline",
+            display_path
+        ));
     }
 
     let lines: Vec<&str> = content.lines().collect();
@@ -87,7 +90,10 @@ fn check_file(path: &Path, content: &str) -> Vec<String> {
 
     // 10. every file that imports output also uses the import tree form
     if has_output && !has_import {
-        errors.push(format!("{}: uses output( but has no import tree", display_path));
+        errors.push(format!(
+            "{}: uses output( but has no import tree",
+            display_path
+        ));
     }
 
     for (i, line) in lines.iter().enumerate() {
@@ -104,7 +110,10 @@ fn check_file(path: &Path, content: &str) -> Vec<String> {
             let indent = line.len() - line.trim_start().len();
             if let Some(w) = indent_width {
                 if indent > 0 && indent % w != 0 {
-                    errors.push(format!("{}: indent {} is not a multiple of {}", line_loc, indent, w));
+                    errors.push(format!(
+                        "{}: indent {} is not a multiple of {}",
+                        line_loc, indent, w
+                    ));
                 }
             }
         }
@@ -223,7 +232,10 @@ fn test_check_file_inline_fixtures() {
 
     // 1. indent is spaces only
     let errors = check_file(dummy_path, "main\n\toutput()\n");
-    assert!(errors.iter().any(|e| e.contains("tab in indent")), "missing tab error");
+    assert!(
+        errors.iter().any(|e| e.contains("tab in indent")),
+        "missing tab error"
+    );
 
     // 2. indent width 2, 4, 6 or 8
     let errors = check_file(dummy_path, "main\n   output()\n"); // width 3
@@ -231,7 +243,11 @@ fn test_check_file_inline_fixtures() {
 
     // 2. multiple of indent width
     let errors = check_file(dummy_path, "main\n  foo\n   bar\n"); // 2, then 3
-    assert!(errors.iter().any(|e| e.contains("indent 3 is not a multiple of 2")));
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.contains("indent 3 is not a multiple of 2"))
+    );
 
     // 3. no trailing whitespace
     let errors = check_file(dummy_path, "main \n  foo\n");
@@ -239,10 +255,18 @@ fn test_check_file_inline_fixtures() {
 
     // 4. exactly one newline
     let errors = check_file(dummy_path, "main");
-    assert!(errors.iter().any(|e| e.contains("file must end with a newline")));
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.contains("file must end with a newline"))
+    );
 
     let errors = check_file(dummy_path, "main\n\n");
-    assert!(errors.iter().any(|e| e.contains("file must end with exactly one newline")));
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.contains("file must end with exactly one newline"))
+    );
 
     // 5. no ::
     let errors = check_file(dummy_path, "main\n  std::output()\n");
@@ -256,7 +280,11 @@ fn test_check_file_inline_fixtures() {
     let errors = check_file(dummy_path, "main!\n");
     assert!(errors.iter().any(|e| e.contains("contains main!")));
     let errors = check_file(dummy_path, "main !\n");
-    assert!(errors.iter().any(|e| e.contains("contains main! or main !")));
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.contains("contains main! or main !"))
+    );
 
     // 8. no <> generic brackets
     let errors = check_file(dummy_path, "List<T>\n");
@@ -264,8 +292,19 @@ fn test_check_file_inline_fixtures() {
 
     // 10. if output is used, import tree form must exist
     let errors = check_file(dummy_path, "main\n  output()\n");
-    assert!(errors.iter().any(|e| e.contains("uses output( but has no import tree")));
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.contains("uses output( but has no import tree"))
+    );
 
-    let no_errors = check_file(dummy_path, "import\n  lib:std\n    io\n      term\n        output\n\nmain\n  output()\n");
-    assert!(no_errors.is_empty(), "expected no errors, got: {:?}", no_errors);
+    let no_errors = check_file(
+        dummy_path,
+        "import\n  lib:std\n    io\n      term\n        output\n\nmain\n  output()\n",
+    );
+    assert!(
+        no_errors.is_empty(),
+        "expected no errors, got: {:?}",
+        no_errors
+    );
 }

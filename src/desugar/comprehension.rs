@@ -1,6 +1,5 @@
-use crate::ast::item::*;
 use crate::ast::expr::*;
-
+use crate::ast::item::*;
 
 /// Lower `[e for x in it]` and `for x in it` into explicit loops.
 pub fn rewrite(items: Vec<Item>) -> Vec<Item> {
@@ -45,7 +44,10 @@ fn rewrite_block(mut block: Block) -> Block {
 fn rewrite_stmt(stmt: Stmt) -> Vec<Stmt> {
     let span = stmt.span;
     match stmt.kind {
-        StmtKind::Expr(e) => vec![Stmt { kind: StmtKind::Expr(rewrite_expr(e)), span }],
+        StmtKind::Expr(e) => vec![Stmt {
+            kind: StmtKind::Expr(rewrite_expr(e)),
+            span,
+        }],
         StmtKind::Assign { target, value } => vec![Stmt {
             kind: StmtKind::Assign {
                 target: rewrite_expr(target),
@@ -178,7 +180,10 @@ fn rewrite_arm(arm: Arm) -> Arm {
         let block = Block {
             stmts: {
                 let mut s = stmts;
-                s.push(Stmt { kind: StmtKind::Break, span: arm.span });
+                s.push(Stmt {
+                    kind: StmtKind::Break,
+                    span: arm.span,
+                });
                 s
             },
             span: arm.span,
@@ -201,7 +206,13 @@ fn rewrite_expr(expr: Expr) -> Expr {
         ExprKind::Call { callee, args } => Expr {
             kind: ExprKind::Call {
                 callee: Box::new(rewrite_expr(*callee)),
-                args: args.into_iter().map(|arg| Arg { name: arg.name, value: rewrite_expr(arg.value) }).collect(),
+                args: args
+                    .into_iter()
+                    .map(|arg| Arg {
+                        name: arg.name,
+                        value: rewrite_expr(arg.value),
+                    })
+                    .collect(),
             },
             span,
         },
@@ -270,22 +281,36 @@ fn rewrite_expr(expr: Expr) -> Expr {
                 kind: ExprKind::Call {
                     callee: Box::new(callee),
                     args: vec![
-                        Arg { name: None, value: lambda },
-                        Arg { name: None, value: rewritten_iter },
+                        Arg {
+                            name: None,
+                            value: lambda,
+                        },
+                        Arg {
+                            name: None,
+                            value: rewritten_iter,
+                        },
                     ],
                 },
                 span,
             }
-        },
+        }
         ExprKind::Propagate(e) => Expr {
             kind: ExprKind::Propagate(Box::new(rewrite_expr(*e))),
             span,
         },
-        ExprKind::If { cond, then, elifs, else_ } => Expr {
+        ExprKind::If {
+            cond,
+            then,
+            elifs,
+            else_,
+        } => Expr {
             kind: ExprKind::If {
                 cond: Box::new(rewrite_expr(*cond)),
                 then: rewrite_block(then),
-                elifs: elifs.into_iter().map(|(c, b)| (rewrite_expr(c), rewrite_block(b))).collect(),
+                elifs: elifs
+                    .into_iter()
+                    .map(|(c, b)| (rewrite_expr(c), rewrite_block(b)))
+                    .collect(),
                 else_: else_.map(rewrite_block),
             },
             span,
@@ -296,9 +321,8 @@ fn rewrite_expr(expr: Expr) -> Expr {
 
 #[cfg(test)]
 mod tests {
-    use crate::diag::Span;
     use super::*;
-
+    use crate::diag::Span;
 
     fn span(start: usize, end: usize) -> Span {
         Span { start, end }
@@ -384,7 +408,10 @@ mod tests {
         let print_call = Expr {
             kind: ExprKind::Call {
                 callee: Box::new(expr_name("print", s)),
-                args: vec![Arg { name: None, value: expr_name("x", s) }],
+                args: vec![Arg {
+                    name: None,
+                    value: expr_name("x", s),
+                }],
             },
             span: s,
         };
@@ -394,7 +421,10 @@ mod tests {
                 var: x_name.clone(),
                 iter: expr_name("iter", s),
                 body: Block {
-                    stmts: vec![Stmt { kind: StmtKind::Expr(print_call.clone()), span: s }],
+                    stmts: vec![Stmt {
+                        kind: StmtKind::Expr(print_call.clone()),
+                        span: s,
+                    }],
                     span: s,
                 },
             },
@@ -455,7 +485,9 @@ mod tests {
                                 match &callee.kind {
                                     ExprKind::Field { base, name } => {
                                         match &base.kind {
-                                            ExprKind::Name(n) => assert!(n.text.starts_with("__it")),
+                                            ExprKind::Name(n) => {
+                                                assert!(n.text.starts_with("__it"))
+                                            }
                                             _ => panic!("Expected Name"),
                                         }
                                         assert_eq!(name.text, "next");
@@ -475,13 +507,11 @@ mod tests {
             _ => panic!("Expected While"),
         }
     }
-
 }
 #[cfg(test)]
 mod additional_tests {
-    use crate::diag::Span;
     use super::*;
-
+    use crate::diag::Span;
 
     fn span(start: usize, end: usize) -> Span {
         Span { start, end }
@@ -540,12 +570,10 @@ mod additional_tests {
             ItemKind::Fn(f) => {
                 assert_eq!(f.body.stmts.len(), 1);
                 match &f.body.stmts[0].kind {
-                    StmtKind::Expr(e) => {
-                        match e.kind {
-                            ExprKind::Call { .. } => {}
-                            _ => panic!("Expected Call inside function body"),
-                        }
-                    }
+                    StmtKind::Expr(e) => match e.kind {
+                        ExprKind::Call { .. } => {}
+                        _ => panic!("Expected Call inside function body"),
+                    },
                     _ => panic!("Expected Expr stmt"),
                 }
             }

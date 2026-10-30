@@ -18,14 +18,30 @@ pub fn scan_op(src: &str, start: usize) -> Option<(Op, usize)> {
     let tail = &src[start..];
 
     // 2-char operators
-    if tail.starts_with("#[") { return Some((Op::AttrOpen, start + 2)); }
-    if tail.starts_with("->") { return Some((Op::Arrow, start + 2)); }
-    if tail.starts_with("=>") { return Some((Op::FatArrow, start + 2)); }
-    if tail.starts_with("==") { return Some((Op::EqEq, start + 2)); }
-    if tail.starts_with("!=") { return Some((Op::BangEq, start + 2)); }
-    if tail.starts_with("<=") { return Some((Op::LtEq, start + 2)); }
-    if tail.starts_with(">=") { return Some((Op::GtEq, start + 2)); }
-    if tail.starts_with("..") { return Some((Op::DotDot, start + 2)); }
+    if tail.starts_with("#[") {
+        return Some((Op::AttrOpen, start + 2));
+    }
+    if tail.starts_with("->") {
+        return Some((Op::Arrow, start + 2));
+    }
+    if tail.starts_with("=>") {
+        return Some((Op::FatArrow, start + 2));
+    }
+    if tail.starts_with("==") {
+        return Some((Op::EqEq, start + 2));
+    }
+    if tail.starts_with("!=") {
+        return Some((Op::BangEq, start + 2));
+    }
+    if tail.starts_with("<=") {
+        return Some((Op::LtEq, start + 2));
+    }
+    if tail.starts_with(">=") {
+        return Some((Op::GtEq, start + 2));
+    }
+    if tail.starts_with("..") {
+        return Some((Op::DotDot, start + 2));
+    }
 
     // 1-char operators
     let mut chars = tail.chars();
@@ -52,10 +68,7 @@ pub fn scan_op(src: &str, start: usize) -> Option<(Op, usize)> {
 
 /// Build an operator token over `[start, end)`.
 pub fn op_token(op: Op, start: usize, end: usize) -> Token {
-    Token::new(
-        super::TokKind::Op(op),
-        crate::diag::Span::new(start, end),
-    )
+    Token::new(super::TokKind::Op(op), crate::diag::Span::new(start, end))
 }
 
 #[cfg(test)]

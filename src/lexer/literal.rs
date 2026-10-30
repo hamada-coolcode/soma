@@ -1,6 +1,6 @@
 use super::{LexError, Token};
 use crate::diag::Span;
-use crate::lexer::token::{TokKind, FPart};
+use crate::lexer::token::{FPart, TokKind};
 
 /// Scan a numeric literal starting at `start` (ASCII digit).
 /// Returns the token and the byte offset just past it.
@@ -55,7 +55,10 @@ pub fn scan_string(src: &str, start: usize) -> Result<Option<(Token, usize)>, Le
                 let text = &src[start + 3..end];
                 let end = end + 3;
                 let span = Span::new(start, end);
-                return Ok(Some((Token::new(TokKind::Str(text.to_string()), span), end)));
+                return Ok(Some((
+                    Token::new(TokKind::Str(text.to_string()), span),
+                    end,
+                )));
             }
             end += 1;
         }
@@ -233,17 +236,29 @@ pub fn scan_fstring(src: &str, start: usize) -> Result<Option<(Token, usize)>, L
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lexer::token::{TokKind, FPart};
     use crate::diag::Span;
+    use crate::lexer::token::{FPart, TokKind};
 
     #[test]
     fn test_scan_number() {
-        assert_eq!(scan_number("123", 0), Some((Token::new(TokKind::Int(123), Span::new(0, 3)), 3)));
-        assert_eq!(scan_number(" 123", 1), Some((Token::new(TokKind::Int(123), Span::new(1, 4)), 4)));
-        assert_eq!(scan_number("123.456", 0), Some((Token::new(TokKind::Float(123.456), Span::new(0, 7)), 7)));
+        assert_eq!(
+            scan_number("123", 0),
+            Some((Token::new(TokKind::Int(123), Span::new(0, 3)), 3))
+        );
+        assert_eq!(
+            scan_number(" 123", 1),
+            Some((Token::new(TokKind::Int(123), Span::new(1, 4)), 4))
+        );
+        assert_eq!(
+            scan_number("123.456", 0),
+            Some((Token::new(TokKind::Float(123.456), Span::new(0, 7)), 7))
+        );
         assert_eq!(scan_number("abc", 0), None);
         // large number fallback
-        assert_eq!(scan_number("999999999999999999999999999999999999", 0), Some((Token::new(TokKind::Int(i64::MAX), Span::new(0, 36)), 36)));
+        assert_eq!(
+            scan_number("999999999999999999999999999999999999", 0),
+            Some((Token::new(TokKind::Int(i64::MAX), Span::new(0, 36)), 36))
+        );
     }
 
     #[test]
@@ -251,17 +266,29 @@ mod tests {
         // Normal string
         assert_eq!(
             scan_string(r#""hello""#, 0).unwrap(),
-            Some((Token::new(TokKind::Str("hello".to_string()), Span::new(0, 7)), 7))
+            Some((
+                Token::new(TokKind::Str("hello".to_string()), Span::new(0, 7)),
+                7
+            ))
         );
         // Escapes
         assert_eq!(
             scan_string(r#""\n\t\"""#, 0).unwrap(),
-            Some((Token::new(TokKind::Str("\n\t\"".to_string()), Span::new(0, 8)), 8))
+            Some((
+                Token::new(TokKind::Str("\n\t\"".to_string()), Span::new(0, 8)),
+                8
+            ))
         );
         // Multiline string
         assert_eq!(
             scan_string(r#""""hello\nworld""""#, 0).unwrap(),
-            Some((Token::new(TokKind::Str(r#"hello\nworld"#.to_string()), Span::new(0, 18)), 18))
+            Some((
+                Token::new(
+                    TokKind::Str(r#"hello\nworld"#.to_string()),
+                    Span::new(0, 18)
+                ),
+                18
+            ))
         );
         // Unterminated string
         assert!(scan_string(r#""unterminated"#, 0).is_err());
@@ -270,7 +297,10 @@ mod tests {
         // Multibyte escapes should not crash
         assert_eq!(
             scan_string("\"\\💖\"", 0).unwrap(),
-            Some((Token::new(TokKind::Str("💖".to_string()), Span::new(0, 7)), 7))
+            Some((
+                Token::new(TokKind::Str("💖".to_string()), Span::new(0, 7)),
+                7
+            ))
         );
     }
 
@@ -278,36 +308,64 @@ mod tests {
     fn test_scan_fstring() {
         assert_eq!(
             scan_fstring(r#"f"hello""#, 0).unwrap(),
-            Some((Token::new(TokKind::FStr(vec![FPart::Text("hello".to_string())]), Span::new(0, 8)), 8))
+            Some((
+                Token::new(
+                    TokKind::FStr(vec![FPart::Text("hello".to_string())]),
+                    Span::new(0, 8)
+                ),
+                8
+            ))
         );
         assert_eq!(
             scan_fstring(r#"f"hello {world}""#, 0).unwrap(),
-            Some((Token::new(TokKind::FStr(vec![
-                FPart::Text("hello ".to_string()),
-                FPart::Expr("world".to_string())
-            ]), Span::new(0, 16)), 16))
+            Some((
+                Token::new(
+                    TokKind::FStr(vec![
+                        FPart::Text("hello ".to_string()),
+                        FPart::Expr("world".to_string())
+                    ]),
+                    Span::new(0, 16)
+                ),
+                16
+            ))
         );
         assert_eq!(
             scan_fstring(r#"f"{a + { b }}""#, 0).unwrap(),
-            Some((Token::new(TokKind::FStr(vec![
-                FPart::Expr("a + { b }".to_string())
-            ]), Span::new(0, 14)), 14))
+            Some((
+                Token::new(
+                    TokKind::FStr(vec![FPart::Expr("a + { b }".to_string())]),
+                    Span::new(0, 14)
+                ),
+                14
+            ))
         );
         // Unterminated expr
         assert!(scan_fstring(r#"f"{abc"#, 0).is_err());
         // String inside expr
         assert_eq!(
             scan_fstring(r#"f"hi {a + "}"} there""#, 0).unwrap(),
-            Some((Token::new(TokKind::FStr(vec![
-                FPart::Text("hi ".to_string()),
-                FPart::Expr(r#"a + "}""#.to_string()),
-                FPart::Text(" there".to_string())
-            ]), Span::new(0, 21)), 21))
+            Some((
+                Token::new(
+                    TokKind::FStr(vec![
+                        FPart::Text("hi ".to_string()),
+                        FPart::Expr(r#"a + "}""#.to_string()),
+                        FPart::Text(" there".to_string())
+                    ]),
+                    Span::new(0, 21)
+                ),
+                21
+            ))
         );
         // Multibyte escapes should not crash
         assert_eq!(
             scan_fstring("f\"\\💖\"", 0).unwrap(),
-            Some((Token::new(TokKind::FStr(vec![FPart::Text("💖".to_string())]), Span::new(0, 8)), 8))
+            Some((
+                Token::new(
+                    TokKind::FStr(vec![FPart::Text("💖".to_string())]),
+                    Span::new(0, 8)
+                ),
+                8
+            ))
         );
     }
 }

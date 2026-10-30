@@ -1,10 +1,10 @@
-use crate::ast::item::*;
 use crate::ast::expr::*;
-use crate::lexer::{Op, TokKind, Token};
-use crate::parse::util::Parser;
-use crate::parse::ParseError;
-use crate::parse::{signature, types, expr};
+use crate::ast::item::*;
 use crate::diag::Span;
+use crate::lexer::{Op, TokKind, Token};
+use crate::parse::ParseError;
+use crate::parse::util::Parser;
+use crate::parse::{expr, signature, types};
 
 fn expect_newline(p: &mut Parser) -> Result<Span, ParseError> {
     if matches!(p.peek_kind(), Some(TokKind::Newline)) {
@@ -18,6 +18,26 @@ fn expect_newline(p: &mut Parser) -> Result<Span, ParseError> {
     } else {
         Err(p.unexpected("newline"))
     }
+}
+
+/// Parse zero or more `#[name]` attributes, skipping the newlines between them.
+fn parse_attrs(p: &mut Parser) -> Result<Vec<Attribute>, ParseError> {
+    let mut attrs = Vec::new();
+    while p.eat_op(Op::AttrOpen) {
+        loop {
+            attrs.push(Attribute {
+                name: p.expect_ident()?,
+            });
+            if p.check_op(Op::RBracket) {
+                break;
+            }
+        }
+        p.expect_op(Op::RBracket)?;
+        while matches!(p.peek_kind(), Some(TokKind::Newline)) {
+            p.pos += 1;
+        }
+    }
+    Ok(attrs)
 }
 
 pub fn parse_file(toks: &[Token]) -> Result<Vec<Item>, ParseError> {
@@ -34,7 +54,6 @@ pub fn parse_file(toks: &[Token]) -> Result<Vec<Item>, ParseError> {
     Ok(items)
 }
 
-
 fn last_span(p: &Parser) -> Span {
     if p.pos > 0 && p.pos <= p.toks.len() {
         p.toks[p.pos - 1].span
@@ -46,8 +65,11 @@ fn last_span(p: &Parser) -> Span {
 fn parse_item(p: &mut Parser) -> Result<Vec<Item>, ParseError> {
     let mut attrs = Vec::new();
     let start_span = p.peek_span();
-    while p.eat_op(Op::AttrOpen) { // `#[`
-        attrs.push(Attribute { name: p.expect_ident()? });
+    while p.eat_op(Op::AttrOpen) {
+        // `#[`
+        attrs.push(Attribute {
+            name: p.expect_ident()?,
+        });
         while let Ok(name) = p.expect_ident() {
             attrs.push(Attribute { name });
         }
@@ -89,89 +111,142 @@ fn parse_item(p: &mut Parser) -> Result<Vec<Item>, ParseError> {
         p.expect_dedent()?;
         kind = ItemKind::Error(ErrorDef { name, variants });
     } else if p.eat_kw("object") {
+        // One `object` block may declare several objects:
+        //   object
+        //     Circle
+        //       radius: float
+        //     Rectangle
+        //       ...
         expect_newline(p)?;
         p.expect_indent()?;
-        let name = p.expect_ident()?;
-        let mut generics = Vec::new();
-        if p.eat_op(Op::LBracket) {
-            generics.push(p.expect_ident()?);
-            while let Ok(ident) = p.expect_ident() {
-                generics.push(ident);
+        let mut objs = Vec::new();
+        while !matches!(p.peek_kind(), Some(TokKind::Dedent)) && !p.at_eof() {
+            let obj_attrs = parse_attrs(p)?;
+            let obj_start = p.peek_span();
+            let name = p.expect_ident()?;
+            let mut generics = Vec::new();
+            if p.eat_op(Op::LBracket) {
+                loop {
+                    generics.push(p.expect_ident()?);
+                    if p.check_op(Op::RBracket) {
+                        break;
+                    }
+                }
+                p.expect_op(Op::RBracket)?;
             }
-            p.expect_op(Op::RBracket)?;
-        }
-        expect_newline(p)?;
-        p.expect_indent()?;
-        let mut fields = Vec::new();
-        let mut methods = Vec::new();
+            expect_newline(p)?;
+            p.expect_indent()?;
+            let mut fields = Vec::new();
+            let mut methods = Vec::new();
 
-        while !matches!(p.peek_kind(), Some(TokKind::Dedent)) {
-            let member_name = p.expect_ident()?;
-            if p.eat_op(Op::Colon) { // field
-                let ty = types::type_repr(p)?;
-                fields.push(FieldDef { name: member_name, ty });
-                if matches!(p.peek_kind(), Some(TokKind::Newline)) {
-                    expect_newline(p)?;
-                }
-            } else { // method
-                let sig;
-                if matches!(p.peek_kind(), Some(TokKind::Newline)) {
-                    sig = Some(crate::parse::signature::Signature {
+            while !matches!(p.peek_kind(), Some(TokKind::Dedent)) && !p.at_eof() {
+                let member_name = p.expect_ident()?;
+                if p.eat_op(Op::Colon) {
+                    // field
+                    let ty = types::type_repr(p)?;
+                    fields.push(FieldDef {
                         name: member_name,
-                        generics: Vec::new(),
-                        params: Vec::new(),
-                        ret: None,
+                        ty,
                     });
-                } else {
-                    let mut temp_p = Parser { toks: p.toks, pos: p.pos - 1 };
-                    sig = Some(crate::parse::signature::signature(&mut temp_p)?);
-                    p.pos = temp_p.pos;
-                }
-
-                expect_newline(p)?;
-                p.expect_indent()?;
-                let mut stmts = Vec::new();
-                while !matches!(p.peek_kind(), Some(TokKind::Dedent)) {
-                    stmts.push(expr::stmt(p)?);
                     if matches!(p.peek_kind(), Some(TokKind::Newline)) {
                         expect_newline(p)?;
                     }
+                } else {
+                    // method
+                    let sig;
+                    if matches!(p.peek_kind(), Some(TokKind::Newline)) {
+                        sig = crate::parse::signature::Signature {
+                            name: member_name,
+                            generics: Vec::new(),
+                            params: Vec::new(),
+                            ret: None,
+                        };
+                    } else {
+                        let mut temp_p = Parser {
+                            toks: p.toks,
+                            pos: p.pos - 1,
+                            allow_lambda: true,
+                        };
+                        sig = crate::parse::signature::signature(&mut temp_p)?;
+                        p.pos = temp_p.pos;
+                    }
+
+                    expect_newline(p)?;
+                    p.expect_indent()?;
+                    let mut stmts = Vec::new();
+                    while !matches!(p.peek_kind(), Some(TokKind::Dedent)) && !p.at_eof() {
+                        stmts.push(expr::stmt(p)?);
+                        if matches!(p.peek_kind(), Some(TokKind::Newline)) {
+                            expect_newline(p)?;
+                        }
+                    }
+                    p.expect_dedent()?;
+                    methods.push(FnDef {
+                        name: sig.name,
+                        generics: sig.generics,
+                        params: sig.params,
+                        ret: sig.ret,
+                        body: Block {
+                            stmts,
+                            span: Default::default(),
+                        },
+                    });
                 }
-                p.expect_dedent()?;
-                methods.push(FnDef {
-                    name: sig.as_ref().unwrap().name.clone(),
-                    generics: sig.as_ref().unwrap().generics.clone(),
-                    params: sig.as_ref().unwrap().params.clone(),
-                    ret: sig.as_ref().unwrap().ret.clone(),
-                    body: Block { stmts, span: Default::default() },
-                });
             }
+            p.expect_dedent()?;
+            objs.push(Item {
+                attrs: attrs.iter().cloned().chain(obj_attrs).collect(),
+                kind: ItemKind::Object(ObjectDef {
+                    name,
+                    generics,
+                    fields,
+                    methods,
+                }),
+                span: obj_start.join(last_span(p)),
+            });
         }
         p.expect_dedent()?;
-        p.expect_dedent()?;
-        kind = ItemKind::Object(ObjectDef { name, generics, fields, methods });
+        return Ok(objs);
     } else if p.eat_kw("fn") {
+        // One `fn` block may declare several functions:
+        //   fn
+        //     a x: int -> int
+        //       ...
+        //     b -> string
+        //       ...
         expect_newline(p)?;
         p.expect_indent()?;
-        let sig = signature::signature(p)?;
-        expect_newline(p)?;
-        p.expect_indent()?;
-        let mut stmts = Vec::new();
-        while !matches!(p.peek_kind(), Some(TokKind::Dedent)) {
-            stmts.push(expr::stmt(p)?);
-            if matches!(p.peek_kind(), Some(TokKind::Newline)) {
-                expect_newline(p)?;
+        let mut fns = Vec::new();
+        while !matches!(p.peek_kind(), Some(TokKind::Dedent)) && !p.at_eof() {
+            let sig_attrs = parse_attrs(p)?;
+            let sig = signature::signature(p)?;
+            expect_newline(p)?;
+            p.expect_indent()?;
+            let mut stmts = Vec::new();
+            while !matches!(p.peek_kind(), Some(TokKind::Dedent)) && !p.at_eof() {
+                stmts.push(expr::stmt(p)?);
+                if matches!(p.peek_kind(), Some(TokKind::Newline)) {
+                    expect_newline(p)?;
+                }
             }
+            p.expect_dedent()?;
+            fns.push(Item {
+                attrs: attrs.iter().cloned().chain(sig_attrs).collect(),
+                kind: ItemKind::Fn(FnDef {
+                    name: sig.name,
+                    generics: sig.generics,
+                    params: sig.params,
+                    ret: sig.ret,
+                    body: Block {
+                        stmts,
+                        span: Default::default(),
+                    },
+                }),
+                span: start_span.join(last_span(p)),
+            });
         }
         p.expect_dedent()?;
-        p.expect_dedent()?;
-        kind = ItemKind::Fn(FnDef {
-            name: sig.name,
-            generics: sig.generics,
-            params: sig.params,
-            ret: sig.ret,
-            body: Block { stmts, span: Default::default() },
-        });
+        return Ok(fns);
     } else if p.eat_kw("trait") {
         expect_newline(p)?;
         p.expect_indent()?;
@@ -181,7 +256,11 @@ fn parse_item(p: &mut Parser) -> Result<Vec<Item>, ParseError> {
         let mut methods = Vec::new();
         while !matches!(p.peek_kind(), Some(TokKind::Dedent)) {
             let _m_name = p.expect_ident()?;
-            let mut temp_p = Parser { toks: p.toks, pos: p.pos - 1 };
+            let mut temp_p = Parser {
+                toks: p.toks,
+                pos: p.pos - 1,
+                allow_lambda: true,
+            };
             let sig = signature::signature(&mut temp_p)?;
             p.pos = temp_p.pos;
             methods.push(TraitMethod {
@@ -214,7 +293,10 @@ fn parse_item(p: &mut Parser) -> Result<Vec<Item>, ParseError> {
                 }
                 p.expect_op(Op::RParen)?;
             }
-            variants.push(EnumVariant { name: v_name, payload });
+            variants.push(EnumVariant {
+                name: v_name,
+                payload,
+            });
             if matches!(p.peek_kind(), Some(TokKind::Newline)) {
                 expect_newline(p)?;
             }
@@ -266,7 +348,13 @@ fn parse_item(p: &mut Parser) -> Result<Vec<Item>, ParseError> {
             p.expect_dedent()?;
             tests.push(Item {
                 attrs: attrs.clone(),
-                kind: ItemKind::Test(TestDef { name: name_str, body: Block { stmts, span: Default::default() } }),
+                kind: ItemKind::Test(TestDef {
+                    name: name_str,
+                    body: Block {
+                        stmts,
+                        span: Default::default(),
+                    },
+                }),
                 span: start_span.join(last_span(p)),
             });
             if matches!(p.peek_kind(), Some(TokKind::Newline)) {
@@ -303,7 +391,11 @@ fn parse_import_path_node(
     current_path.push(name);
 
     let mut children = Vec::new();
-    let mut temp_p = Parser { toks: p.toks, pos: p.pos };
+    let mut temp_p = Parser {
+        toks: p.toks,
+        pos: p.pos,
+        allow_lambda: true,
+    };
     while matches!(temp_p.peek_kind(), Some(TokKind::Newline)) {
         temp_p.pos += 1;
     }
@@ -312,16 +404,16 @@ fn parse_import_path_node(
         while matches!(p.peek_kind(), Some(TokKind::Newline)) {
             expect_newline(p)?;
         }
-            p.expect_indent()?;
-            let mut child_items = Vec::new();
-            while !matches!(p.peek_kind(), Some(TokKind::Dedent)) {
-                parse_import_path_node(p, &mut child_items, current_path.clone(), attrs, start_span)?;
-                if matches!(p.peek_kind(), Some(TokKind::Newline)) {
-                    expect_newline(p)?;
-                }
+        p.expect_indent()?;
+        let mut child_items = Vec::new();
+        while !matches!(p.peek_kind(), Some(TokKind::Dedent)) {
+            parse_import_path_node(p, &mut child_items, current_path.clone(), attrs, start_span)?;
+            if matches!(p.peek_kind(), Some(TokKind::Newline)) {
+                expect_newline(p)?;
             }
-            p.expect_dedent()?;
-            children = child_items;
+        }
+        p.expect_dedent()?;
+        children = child_items;
     }
 
     out.push(Item {
