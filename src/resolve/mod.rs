@@ -18,8 +18,18 @@ struct Resolver {
 
 impl Resolver {
     fn new() -> Self {
+        let mut scope = Scope::new();
+        // Primitive type names are always in scope; user types arrive in pass 1.
+        for prim in ["int", "uint", "float", "bool", "string", "null", "void", "Self"] {
+            scope.define(Symbol {
+                name: prim.to_string(),
+                kind: SymbolKind::Type,
+                span: Default::default(),
+                mutable: false,
+            });
+        }
         Self {
-            scope: Scope::new(),
+            scope,
             diags: Vec::new(),
         }
     }
@@ -28,7 +38,7 @@ impl Resolver {
         if let Some(_prev) = self.scope.lookup_current(&name.text) {
             self.diags.push(Diagnostic::new(
                 ErrorKind::Other,
-                "E0303",
+                format!("duplicate definition of `{}`", name.text),
                 name.span,
             ));
         } else {
@@ -190,7 +200,10 @@ impl Resolver {
                     if !sym.mutable {
                         self.diags.push(Diagnostic::new(
                             ErrorKind::Other,
-                            "E0301",
+                            format!(
+                                "`{}` is a read-only parameter; bind a new local",
+                                n.text
+                            ),
                             n.span,
                         ));
                     }
@@ -216,7 +229,7 @@ impl Resolver {
                 if self.scope.lookup(&n.text).is_none() {
                     self.diags.push(Diagnostic::new(
                         ErrorKind::Other,
-                        "E0302",
+                        format!("undefined name `{}`", n.text),
                         n.span,
                     ));
                 }
@@ -225,7 +238,7 @@ impl Resolver {
                 if self.scope.lookup("self").is_none() {
                     self.diags.push(Diagnostic::new(
                         ErrorKind::Other,
-                        "E0302",
+                        "`self` outside a method",
                         e.span,
                     ));
                 }
@@ -363,7 +376,7 @@ mod tests {
         let item = Item { attrs: vec![], kind: ItemKind::Fn(f), span: Span::new(0, 1) };
         let diags = check(&[item]);
         assert_eq!(diags.len(), 1);
-        assert_eq!(diags[0].message, "E0302");
+        assert!(diags[0].message.contains("undefined name"));
     }
 
     #[test]
@@ -394,7 +407,7 @@ mod tests {
         let item = Item { attrs: vec![], kind: ItemKind::Fn(f), span: Span::new(0, 1) };
         let diags = check(&[item]);
         assert_eq!(diags.len(), 1);
-        assert_eq!(diags[0].message, "E0301");
+        assert!(diags[0].message.contains("read-only parameter"));
     }
 
     #[test]
@@ -419,6 +432,6 @@ mod tests {
         let item = Item { attrs: vec![], kind: ItemKind::Fn(f), span: Span::new(0, 1) };
         let diags = check(&[item]);
         assert_eq!(diags.len(), 1);
-        assert_eq!(diags[0].message, "E0303");
+        assert!(diags[0].message.contains("duplicate definition"));
     }
 }
