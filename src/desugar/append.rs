@@ -165,14 +165,14 @@ fn walk_expr(expr: &mut Expr) {
                 &mut **lhs,
                 Expr {
                     kind: ExprKind::Null,
-                    span: expr.span.clone(),
+                    span: expr.span,
                 },
             );
             let rhs_val = std::mem::replace(
                 &mut **rhs,
                 Expr {
                     kind: ExprKind::Null,
-                    span: expr.span.clone(),
+                    span: expr.span,
                 },
             );
 
@@ -181,15 +181,15 @@ fn walk_expr(expr: &mut Expr) {
             // will reject it because types aren't available yet, but we want it
             // untouched so the type checker handles it natively or throws an error.
 
-            let span = expr.span.clone();
+            let span = expr.span;
 
             expr.kind = ExprKind::Call {
                 callee: Box::new(Expr {
                     kind: ExprKind::Field {
                         base: Box::new(lhs_val),
-                        name: Name::new("add", span.clone()),
+                        name: Name::new("add", span),
                     },
-                    span: span.clone(),
+                    span,
                 }),
                 args: vec![Arg {
                     name: None,
