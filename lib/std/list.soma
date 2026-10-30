@@ -1,0 +1,5 @@
+fn
+  len -> int
+  add x: T -> !
+  extend xs: T[] -> !
+  map f: (T) T -> T[]

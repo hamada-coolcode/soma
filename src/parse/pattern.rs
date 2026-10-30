@@ -6,8 +6,8 @@ use crate::ast::expr::{Arm, Pattern, Stmt};
 use crate::diag::Span;
 use crate::lexer::{Op, TokKind};
 
-use super::util::Parser;
 use super::ParseError;
+use super::util::Parser;
 
 /// Parse `Pattern => stmt`.
 pub fn match_arm(p: &mut Parser<'_>) -> Result<Arm, ParseError> {
