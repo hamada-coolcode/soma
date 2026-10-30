@@ -1,6 +1,6 @@
 use std::fs;
-use std::path::{Path, PathBuf};
-use soma::driver::{parse_source, Parsed};
+use std::path::Path;
+use soma::driver::parse_source;
 use soma::ast::item::{Item, ItemKind};
 
 fn check_spans(items: &[Item]) {
@@ -95,7 +95,7 @@ fn test_file(path: &Path) {
 
 #[test]
 fn test_corpus_files() {
-    let mut entries: Vec<_> = fs::read_dir("tests/corpus").unwrap().map(|e| e.unwrap().path()).collect();
+    let mut entries: Vec<_> = fs::read_dir("tests/corpus").unwrap().map(|e| e.unwrap().path()).filter(|p| p.is_file()).collect();
     entries.sort();
     assert_eq!(entries.len(), 10, "Expected exactly 10 corpus files");
     for path in entries {
