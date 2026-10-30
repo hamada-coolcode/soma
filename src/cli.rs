@@ -20,7 +20,7 @@ pub fn run() -> ExitCode {
         Some(other) => {
             eprintln!("soma: unknown command `{other}`");
             help();
-            ExitCode::FAILURE
+            ExitCode::from(2)
         }
     }
 }
@@ -42,8 +42,14 @@ fn read(path: &str) -> Result<String, String> {
 fn parse_cmd(args: &[String]) -> ExitCode {
     let mut emit = false;
     let mut files = Vec::new();
+    let mut _program_args = Vec::new();
+    let mut dash_dash = false;
     for a in args {
-        if a == "--emit-psoma" {
+        if dash_dash {
+            _program_args.push(a.clone());
+        } else if a == "--" {
+            dash_dash = true;
+        } else if a == "--emit-psoma" {
             emit = true;
         } else {
             files.push(a.clone());
@@ -51,19 +57,20 @@ fn parse_cmd(args: &[String]) -> ExitCode {
     }
     let Some(path) = files.first() else {
         eprintln!("soma parse: missing file");
-        return ExitCode::FAILURE;
+        return ExitCode::from(2);
     };
     let src = match read(path) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("{e}");
-            return ExitCode::FAILURE;
+            let diag = crate::diag::Diagnostic::new(crate::diag::ErrorKind::Io, e, crate::diag::Span::new(0, 0));
+            eprintln!("{}", crate::driver::render(&diag, path, ""));
+            return ExitCode::from(2);
         }
     };
     match crate::driver::parse_source(path, &src) {
         Err(d) => {
             eprintln!("{}", crate::driver::render(&d, path, &src));
-            ExitCode::FAILURE
+            ExitCode::from(1)
         }
         Ok(parsed) => {
             if emit {
@@ -77,15 +84,28 @@ fn parse_cmd(args: &[String]) -> ExitCode {
 }
 
 fn check_cmd(args: &[String]) -> ExitCode {
-    let Some(path) = args.first() else {
+    let mut files = Vec::new();
+    let mut _program_args = Vec::new();
+    let mut dash_dash = false;
+    for a in args {
+        if dash_dash {
+            _program_args.push(a.clone());
+        } else if a == "--" {
+            dash_dash = true;
+        } else {
+            files.push(a.clone());
+        }
+    }
+    let Some(path) = files.first() else {
         eprintln!("soma check: missing file");
-        return ExitCode::FAILURE;
+        return ExitCode::from(2);
     };
     let src = match read(path) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("{e}");
-            return ExitCode::FAILURE;
+            let diag = crate::diag::Diagnostic::new(crate::diag::ErrorKind::Io, e, crate::diag::Span::new(0, 0));
+            eprintln!("{}", crate::driver::render(&diag, path, ""));
+            return ExitCode::from(2);
         }
     };
     let (_parsed, diags) = crate::driver::check_source(path, &src);
@@ -95,15 +115,28 @@ fn check_cmd(args: &[String]) -> ExitCode {
     } else {
         for d in &diags {
             eprintln!("{}", crate::driver::render(d, path, &src));
+            eprintln!();
         }
-        ExitCode::FAILURE
+        ExitCode::from(1)
     }
 }
 
 fn run_cmd(args: &[String]) -> ExitCode {
-    let Some(path) = args.first() else {
+    let mut files = Vec::new();
+    let mut _program_args = Vec::new();
+    let mut dash_dash = false;
+    for a in args {
+        if dash_dash {
+            _program_args.push(a.clone());
+        } else if a == "--" {
+            dash_dash = true;
+        } else {
+            files.push(a.clone());
+        }
+    }
+    let Some(path) = files.first() else {
         eprintln!("soma run: missing file");
-        return ExitCode::FAILURE;
+        return ExitCode::from(2);
     };
     match crate::interp::run_file(path) {
         Ok(out) => {
@@ -112,7 +145,7 @@ fn run_cmd(args: &[String]) -> ExitCode {
         }
         Err(d) => {
             eprintln!("{}", d.message);
-            ExitCode::FAILURE
+            ExitCode::from(1)
         }
     }
 }
