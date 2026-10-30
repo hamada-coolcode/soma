@@ -1,0 +1,12 @@
+fn
+  sum_range start: int end: int -> int
+    total = 0
+    for i in start..end
+      total = total + i
+    return total
+
+test
+  "ranges"
+    assert(sum_range(0 5) == 10)
+    for i in ..10
+      print(i)

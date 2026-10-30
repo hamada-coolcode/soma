@@ -1,0 +1,12 @@
+fn
+  filter_even xs: int[] -> int[]
+    return [x for x in xs]
+
+  square_all xs: int[] -> int[]
+    return [x * x for x in xs]
+
+test
+  "lists"
+    nums = [1 2 3 4]
+    evens = filter_even(nums)
+    squares = square_all(evens)

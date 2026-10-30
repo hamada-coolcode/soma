@@ -1,0 +1,13 @@
+object
+  Point
+    x: int
+    y: int
+
+    move dx: int dy: int -> Point
+      return Point(x=self.x + dx y=self.y + dy)
+
+test
+  "objects"
+    p = Point(x=0 y=0)
+    p2 = p.move(1 2)
+    assert(p2.x == 1)

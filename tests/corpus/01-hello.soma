@@ -1,0 +1,7 @@
+fn
+  main -> !
+    print("Hello, world!")
+
+test
+  "hello"
+    assert(true)
