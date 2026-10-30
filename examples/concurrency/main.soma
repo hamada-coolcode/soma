@@ -1,0 +1,30 @@
+
+import
+  lib:std
+    io
+      term
+        output
+    thread
+      async
+      wait
+
+fn
+  #[async]
+  worker id: int -> int
+    sum = 0
+    j = 0
+    while j < 1000000
+      sum = sum + j
+      j = j + 1
+    output(f"worker {id} sum = {sum}")
+    return sum
+
+  main
+    # spawn runs the function on a new thread and returns a handle
+    handles = [worker(i) for i in ..4]
+
+    total = 0
+    for h in handles
+      total = total + wait(h)   # wait blocks until the thread finishes
+
+    output(f"total = {total}")

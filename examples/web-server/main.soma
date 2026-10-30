@@ -1,0 +1,15 @@
+
+import
+  lib:std
+    net
+      http
+        Router
+        get
+
+fn
+  hello -> string
+    return "Hello, world"
+
+  main -> !
+    router = Router.new("localhost" 7777)!
+    router.get("/" hello)

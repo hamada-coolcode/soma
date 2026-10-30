@@ -1,0 +1,26 @@
+
+import
+  lib:std
+    io
+      term
+        output
+        input
+    rand
+      choice
+
+const
+  SECRET_NUMBER = choice(1..100)
+
+fn
+  main
+    output("Guess the number!")
+
+    loop
+      guess = input[uint]("Please input your guess: ")! break
+
+      output(f"You guessed: {guess}")
+      if guess > SECRET_NUMBER => output("Too big!")
+      elif guess < SECRET_NUMBER => output("Too small!")
+      else
+        output("You win!")
+        break

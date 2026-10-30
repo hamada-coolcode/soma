@@ -1,0 +1,24 @@
+
+import
+  lib:std
+    io
+      term
+        output
+
+enum
+  Expr
+    Num(int)
+    Add(Expr Expr)
+    Mul(Expr Expr)
+
+fn
+  eval e: Expr -> int
+    match e
+      Num(v)   => return v
+      Add(a b) => return eval(a) + eval(b)
+      Mul(a b) => return eval(a) * eval(b)
+
+  main
+    # (2 + 3) * 4
+    e = Mul(Add(Num(2) Num(3)) Num(4))
+    output(f"eval = {eval(e)}")

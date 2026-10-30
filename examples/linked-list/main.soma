@@ -1,0 +1,45 @@
+
+import
+  lib:std
+    io
+      term
+        output
+
+object
+  Node
+    val: int
+    next: Node?
+
+  LinkedList
+    head: Node?
+
+    new -> LinkedList
+      return LinkedList(head = null)
+
+    prepend val: int
+      node = Node(val = val next = self.head)
+      self.head = node
+
+    len -> int
+      count = 0
+      n = self.head
+      while n != null
+        count = count + 1
+        n = n.next
+      return count
+
+    print
+      n = self.head
+      while n != null
+        output(f"{n.val} -> ")
+        n = n.next
+      output("nil")
+
+fn
+  main
+    l = LinkedList.new()
+    l.prepend(3)
+    l.prepend(2)
+    l.prepend(1)
+    l.print()
+    output(f"len:  {l.len()}")

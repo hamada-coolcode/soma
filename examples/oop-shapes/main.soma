@@ -1,0 +1,64 @@
+
+import
+  lib:std
+    io
+      term
+        output
+    math
+      pi
+
+trait
+  Shape
+    area -> float
+    name -> string
+
+object
+  Circle
+    radius: float
+
+    area -> float
+      return pi * self.radius * self.radius
+
+    name -> string
+      return "circle"
+
+  Rectangle
+    width: float
+    height: float
+
+    area -> float
+      return self.width * self.height
+
+    name -> string
+      return "rectangle"
+
+  # NOTE: Triangle never says "I am a Shape" anywhere.
+  # It just happens to have area() and name(), so it qualifies.
+  Triangle
+    base: float
+    height: float
+
+    area -> float
+      return 0.5 * self.base * self.height
+
+    name -> string
+      return "triangle"
+
+fn
+  # accepts ANY object that satisfies Shape — structural, not declared
+  combined_area s1: Shape s2: Shape -> float
+    return s1.area() + s2.area()
+
+  main
+    # each is just its own object; none registered itself as a Shape
+    c = Circle(radius = 2.0)
+    r = Rectangle(width = 3.0 height = 4.0)
+    t = Triangle(base = 6.0 height = 2.0)
+
+    output(f"{c.name()} area = {c.area()}")
+    output(f"{r.name()} area = {r.area()}")
+    output(f"{t.name()} area = {t.area()}")
+
+    # mixed types work because matching is by trait shape, not by name
+    output(f"circle + triangle = {combined_area(c t)}")
+    output(f"rect + tri        = {combined_area(r t)}")

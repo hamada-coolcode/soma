@@ -1,0 +1,35 @@
+
+import
+  lib:std
+    io
+      term
+        output
+
+fn
+  nstep seed: int[] count: int -> int[]
+    seq = []
+    for x in seed
+      seq + x
+
+    n = seed.len()
+    while seq.len() < count
+      next = 0
+      i = seq.len() - n
+      while i < seq.len()
+        next = next + seq[i]
+        i = i + 1
+      seq + next
+
+    return seq
+
+  main
+    # 2-step fibonacci: 0 1 1 2 3 5 8 13 21 34
+    seq = nstep([0 1] 10)
+    for x in seq
+      output(f"{x}")
+
+    # 3-step: 0 0 1 1 2 4 7 13 24 44
+    output("---")
+    seq = nstep([0 0 1] 10)
+    for x in seq
+      output(f"{x}")

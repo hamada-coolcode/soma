@@ -1,0 +1,9 @@
+import
+  lib:std
+    io
+      term
+        output
+
+fn
+  main
+    output("Hello, World!")

@@ -1,0 +1,9 @@
+[package]
+name = "soma"
+version = "2026.10.29"
+edition = "2024"
+
+[dependencies]
+inkwell = { version = "0.7.1", features = ["llvm17-0"] }
+chumsky = { version = "0.13.0" }
+ariadne = { version = "0.6.0", features = ["concolor"] }

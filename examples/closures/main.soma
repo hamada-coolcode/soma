@@ -1,0 +1,36 @@
+
+import
+  lib:std
+    io
+      term
+        output
+
+fn
+  # higher-order: takes a function as a value
+  apply x: int f: (int) int -> int
+    return f(x)
+
+  main
+    numbers = [5 2 9 1 7 3]
+
+    numbers.sort((a b) => a - b)
+    output(f"sorted asc:  {numbers}")
+
+    numbers.sort((a b) => b - a)
+    output(f"sorted desc: {numbers}")
+
+    # lambdas: `x => expr` (single) or `(a b) => expr` (multi-arg)
+    doubled = numbers.map(x => x * 2)
+    evens = numbers.filter(x => x % 2 == 0)
+    sum = numbers.reduce(0 (acc x) => acc + x)
+
+    output(f"doubled: {doubled}")
+    output(f"evens:   {evens}")
+    output(f"sum:     {sum}")
+
+    # lambda capturing environment
+    factor = 3
+    scale = x => x * factor
+    output(f"scale(5): {scale(5)}")
+
+    output(f"apply(5 double): {apply(5 x => x * 2)}")

@@ -1,0 +1,96 @@
+
+import
+  lib:std
+    io
+      term
+        output
+    env
+      args
+      BoolVar
+    fs
+      File
+
+error
+  ConfigBuildError
+    NotEnoughArguments
+
+object
+  Config
+    query: string
+    file_path: string
+    ignore_case: bool
+
+    build args: string[] -> ConfigBuildError!Self
+      if args.len() < 3
+        return NotEnoughArguments
+
+      query = args[1]
+      file_path = args[2]
+      ignore_case = BoolVar("IGNORE_CASE")
+
+      return Self(query file_path ignore_case)
+
+fn
+  search query: string contents: string -> string[]
+    results = []
+
+    for line in contents.lines()
+      if line.contains(query)
+        results + line
+
+    return results
+
+  search_case_insensitive query: string contents: string -> string[]
+    q = query.lower()          # params are read-only: bind a new local
+    results = []
+
+    for line in contents.lines()
+      if line.lower().contains(q)
+        results + line
+
+    return results
+
+  run config: Config -> !
+    contents = File(config.file_path).read()!
+
+    results = if config.ignore_case
+      search_case_insensitive(config.query contents)
+    else
+      search(config.query contents)
+
+    for line in results
+      output(f"{line}")
+
+  main -> !
+    args = args()
+    config = Config.build(args)!
+
+    output(f"Searching for {config.query}")
+    output(f"In file {config.file_path}")
+
+    run(config)!
+
+test
+  "One Result"
+    query = "duct"
+    contents = """Rust:
+    safe, fast, productive.
+    Pick three.
+    Duct tape."""
+    ["safe, fast, productive."] == search(query contents)
+
+  "Case Sensitive"
+    query = "Duct"
+    contents = """Rust:
+    safe, fast, productive.
+    Pick three.
+    Duct tape."""
+    ["Duct tape."] == search(query contents)
+
+  "Case Insensitive"
+    query = "dUcT"
+    contents = """Rust:
+    safe, fast, productive.
+    Pick three.
+    Duct tape."""
+    ["safe, fast, productive." "Duct tape."] == search_case_insensitive(query contents)

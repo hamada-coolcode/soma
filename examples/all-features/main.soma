@@ -1,0 +1,187 @@
+# soma — everything-in-one-language tour
+# A design-review artifact: every settled feature in one file.
+# Rules it follows are documented in ../../design/*.md
+
+import
+  lib:std
+    io
+      term
+        output
+    math
+      pi
+    rand
+      choice
+    thread
+      async
+      wait
+
+const
+  APP = "soma tour"
+  SECRET = choice(1..100)
+
+error
+  AppError
+    DivisionByZero
+    Empty
+
+trait
+  Shape
+    area -> float
+    name -> string
+
+object
+  Circle
+    radius: float
+
+    area -> float
+      return pi * self.radius * self.radius
+
+    name -> string
+      return "circle"
+
+  # structural: never declares it is a Shape, yet qualifies
+  Triangle
+    base: float
+    height: float
+
+    area -> float
+      return 0.5 * self.base * self.height
+
+    name -> string
+      return "triangle"
+
+  # generic object
+  Stack[T]
+    items: T[]
+
+    new -> Stack[T]
+      return Stack(items = [])
+
+    push item: T
+      self.items.add(item)
+
+    pop -> AppError!T
+      if self.items.len() == 0
+        return Empty
+      return self.items.pop()
+
+    peek -> T
+      return self.items.last()
+
+  # optional link
+  Node
+    val: int
+    next: Node?
+
+enum
+  Expr
+    Num(int)
+    Add(Expr Expr)
+
+fn
+  # signature: bare params, return after `->` — no commas anywhere
+  add a: int b: int -> int
+    return a + b
+
+  div a: int b: int -> AppError!int
+    if b == 0
+      return DivisionByZero
+    return a / b
+
+  # structural trait parameters
+  combined_area s1: Shape s2: Shape -> float
+    return s1.area() + s2.area()
+
+  # higher-order: function type as a parameter
+  apply x: int f: (int) int -> int
+    return f(x)
+
+  # builds a list and returns it (moves to caller — no copy, no marker)
+  range n: int -> int[]
+    out = []
+    for i in 0..n
+      out + i                 # `+` sugar for .add()
+    return out
+
+  #[async]
+  worker id: int -> int
+    sum = 0
+    while sum < 10
+      sum = sum + 1
+    return sum
+
+  # match over an enum (design TBD)
+  eval e: Expr -> int
+    match e
+      Num(v) => return v
+      Add(a b) => return eval(a) + eval(b)
+
+  show s: string
+    output(s)
+
+  main -> !
+    show(APP)
+
+    # ---- control flow ----
+    i = 0
+    while i < 3
+      output(f"i = {i}")
+      i = i + 1
+
+    for x in [1 2 3]
+      if x == 2 => output("two")
+      elif x == 3 => output("three")
+      else
+        output(f"x = {x}")
+
+    loop
+      break
+
+    # ---- lambdas + higher-order ----
+    nums = [5 2 9 1]
+    nums.sort((a b) => b - a)
+    doubled = nums.map(x => x * 2)
+    scale = x => x * 3
+    output(f"scale(2) = {scale(2)}")
+    output(f"apply double = {apply(4 x => x * 2)}")
+
+    # ---- lists, ranges, comprehension ----
+    seq = range(5)
+    output(f"seq = {seq}")
+
+    # ---- generics + error propagation + handler ----
+    st = Stack.new[int]()
+    st.push(1)
+    st.push(2)
+    output(f"peek = {st.peek()}")
+    output(f"pop  = {st.pop()!}")                    # ! propagate
+
+    r = div(10 2)!
+    output(f"10/2 = {r}")
+    div(10 0) ! output("cannot divide by zero")      # ! handler
+
+    # ---- structural traits ----
+    c = Circle(radius = 2.0)
+    t = Triangle(base = 6.0 height = 4.0)
+    output(f"{c.name()} + {t.name()} = {combined_area(c t)}")
+
+    # ---- optionals ----
+    n = Node(val = 1 next = null)
+    if n.next == null => output("tail of list")
+
+    # ---- enum + match ----
+    output(f"eval = {eval(Add(Num(2) Num(3)))}")
+
+    # ---- concurrency ----
+    handles = [worker(i) for i in ..4]
+    total = 0
+    for h in handles
+      total = total + wait(h)
+    output(f"async total = {total}")
+
+test
+  "add works"
+    5 == add(2 3)
+
+  "range builds a list"
+    [0 1 2 3] == range(4)

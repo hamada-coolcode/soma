@@ -1,0 +1,37 @@
+
+import
+  lib:std
+    io
+      term
+        output
+
+error
+  SumError
+    BadInt
+    DivisionByZero
+
+fn
+  parse_and_sum values: string[] -> SumError!int
+    total = 0
+    for v in values
+      n = v.parse[int]()!      # ! with nothing after: propagate to caller
+      total = total + n
+    return total
+
+  safe_div a: int b: int -> SumError!int
+    if b == 0
+      return DivisionByZero
+    return a / b
+
+  main -> !
+    good = ["10" "20" "30"]
+    bad = ["10" "oops" "30"]
+
+    total = parse_and_sum(good)!
+    output(f"sum = {total}")
+
+    output(f"sum / 3 = {safe_div(total 3)!}")
+
+    # ! followed by code: run that code only if the call fails
+    safe_div(total 0) ! output("cannot divide by zero")
+    parse_and_sum(bad) ! output("parse failed")
