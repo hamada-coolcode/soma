@@ -1,5 +1,7 @@
 pub mod blocks;
 pub mod expr;
+pub mod items;
+pub mod pattern;
 pub mod signature;
 pub mod types;
 pub mod util;
@@ -24,4 +26,5 @@ impl ParseError {
 }
 
 pub use blocks::parse_file;
+pub use pattern::{match_arm, pattern};
 pub use signature::Signature;

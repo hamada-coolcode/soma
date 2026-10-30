@@ -1,0 +1,6 @@
+object Circle {
+  radius: float;
+  area() -> float {
+    return ((3.14 * self.radius) * self.radius);
+  }
+}

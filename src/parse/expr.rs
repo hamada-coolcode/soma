@@ -743,34 +743,7 @@ fn parse_block(p: &mut Parser<'_>) -> Result<Block, ParseError> {
 }
 
 fn parse_arm(p: &mut Parser<'_>) -> Result<Arm, ParseError> {
-    let start = p.peek_span().start;
-    let name = p.expect_ident()?;
-    let mut binds = Vec::new();
-    if p.eat_op(Op::LParen) {
-        while let Some(TokKind::Ident(_)) = p.peek_kind() {
-            binds.push(p.expect_ident()?);
-        }
-        p.expect_op(Op::RParen)?;
-    }
-    let pattern_span = Span {
-        start,
-        end: p.toks[p.pos - 1].span.end,
-    };
-    let pattern = Pattern {
-        name,
-        binds,
-        span: pattern_span,
-    };
-
-    p.expect_op(Op::FatArrow)?;
-
-    let body = stmt(p)?;
-    let end = body.span.end;
-    Ok(Arm {
-        pattern,
-        body,
-        span: Span { start, end },
-    })
+    crate::parse::pattern::match_arm(p)
 }
 
 #[cfg(test)]

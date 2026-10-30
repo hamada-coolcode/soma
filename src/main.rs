@@ -1,3 +1,5 @@
-fn main() {
-    soma::cli::run();
+use std::process::ExitCode;
+
+fn main() -> ExitCode {
+    soma::cli::run()
 }

@@ -49,3 +49,29 @@ jules remote new --repo hamada-coolcode/soma \
 
 Monitor with `jules remote list --session`, pull with
 `jules remote pull --session <id> [--apply]`.
+
+## Round 2 — v2 briefs (`jules/tasks/v2/`)
+
+Goal: make the binary real (`soma parse|check|run`), complete the parser, freeze
+the `.psoma` IR, then add resolution + type checking + an interpreter.
+
+**Contract files, read before anything else:** `jules/grammar.ebnf`,
+`jules/psoma.md`, `tests/golden/` (frozen).
+
+| Wave | Tasks | Launched |
+| --- | --- | --- |
+| A (parallel) | 01 cli, 02 conformance, 03 lexer, 04 items, 05 patterns, 06 diag codes, 07 psoma | together |
+| B1 (parallel) | 08 stdlib, 09 resolver, 10 types core, 15 interpreter | after A merges |
+| B2 (parallel) | 11 check-expr, 12 check-item | after B1 merges |
+| B3 (parallel) | 13 generics, 14 match-check | after B2 merges |
+
+Waves are staged on purpose: B2/B3 consume APIs that B1 introduces. Do not
+launch a later wave before its predecessors are merged into `main`.
+
+A task is accepted only if:
+1. `cargo test` passes locally for the agent **and** on the merged tree;
+2. `git diff --stat` touches only the files the brief lists;
+3. no `todo!()`/`unimplemented!()` remains in its files;
+4. the PR description shows the new `cargo test` output.
+
+Merging is done by the maintainer, never by a "merge everything" session.

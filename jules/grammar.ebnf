@@ -51,7 +51,10 @@ item-body    = fn | object | trait | error | enum | import | const | test ;
 (* ─────────────────────── fn signatures ─────────────────────── *)
 (* bare parameters, no parens, no commas; return after "->" *)
 
-fn           = "fn" NL INDENT signature NL INDENT block DEDENT DEDENT ;
+(* A `fn` section declares one or more functions. The signature sits on its own
+   line at section indent + 1; its body is one level deeper. *)
+fn           = "fn" NL INDENT { fn-decl } DEDENT ;
+fn-decl      = { attr } signature NL INDENT block DEDENT ;
 signature    = identifier [ "[" identifier { identifier } "]" ]
                { param } [ "->" type ] ;
 param        = identifier ":" type ;
@@ -59,10 +62,11 @@ trait-method = signature ;
 
 (* ─────────────────────── object / trait ─────────────────────── *)
 
-object       = "object" NL INDENT identifier
-               [ "[" identifier { identifier } "]" ] NL INDENT
+(* A `object` section declares one or more objects. *)
+object       = "object" NL INDENT { object-decl } DEDENT ;
+object-decl  = { attr } identifier [ "[" identifier { identifier } "]" ] NL INDENT
                member { NL { NL } member }
-               DEDENT DEDENT ;
+               DEDENT ;
 member       = field | method ;
 field        = identifier ":" type ;
 method       = signature NL INDENT block DEDENT ;
@@ -139,6 +143,12 @@ primary      = int | float | string | fstring | multiline
              | "self" | identifier
              | "(" expr ")" | list | "if" expr "=>" expr [ "else" expr ] ;
 list         = "[" [ expr { expr } | expr "for" identifier "in" expr ] "]" ;
+
+(* ─────────────── lambda vs if-condition ambiguity ─────────────── *)
+(* `x => e` is a lambda, but `if c => body` also uses `=>`. Rule: while parsing
+   an `if`/`elif` condition, a top-level `=>` terminates the condition (lambdas
+   are re-enabled inside call arguments, so `if xs.any(x => x > 0) => ...`
+   works). The parser implements this with `Parser::allow_lambda`. *)
 
 (* ─────────────────── error handling (05-errors) ─────────────────── *)
 (* "expr!"        postfix propagate — parsed as part of postfix
