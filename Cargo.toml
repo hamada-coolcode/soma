@@ -2,8 +2,13 @@
 name = "soma"
 version = "2026.10.29"
 edition = "2024"
+# examples/ holds Rosetta-style reference programs in many languages,
+# not Cargo example targets.
+autoexamples = false
 
 [dependencies]
-inkwell = { version = "0.7.1", features = ["llvm17-0"] }
-chumsky = { version = "0.13.0" }
 ariadne = { version = "0.6.0", features = ["concolor"] }
+
+# Deliberately absent until the front-end exists:
+#   inkwell  (LLVM codegen; also requires llvm-config-17 on CI)
+#   chumsky  (we hand-roll recursive descent over tokens instead)

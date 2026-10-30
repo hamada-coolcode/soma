@@ -1,0 +1,152 @@
+(* soma grammar — the contract for every parser/lexer task.
+   Source of truth: design/02-syntax.md. If they disagree, the design doc wins;
+   update this file in the same PR.
+
+   Tokens are produced by src/lexer (see src/lexer/token.rs). The parser works
+   on a flat token stream that already contains Indent / Dedent / Newline. *)
+
+(* ───────────────────────── lexical ───────────────────────── *)
+
+comment      = "#" { any-but-newline } ;        (* "#[" is AttrOpen, NOT a comment *)
+newline      = NL ;
+identifier   = (letter | "_") { letter | digit | "_" } ;   (* keywords are still Ident *)
+int          = digit { digit } ;
+float        = digit { digit } "." digit { digit } ;
+string       = '"' { escape | any-but-quote-newline } '"' ;
+multiline    = '"""' { any } '"""' ;            (* terminates at the next '"""' *)
+fstring      = 'f"' { fpart } '"' ;
+fpart        = text | "{" balanced-source "}" ; (* balanced braces/strings inside *)
+escape       = "\" ( "n" | "t" | "r" | "\" | '"' | "{" | "}" ) ;
+
+operators    = "+" | "-" | "*" | "/" | "%"
+             | "==" | "!=" | "<" | ">" | "<=" | ">="
+             | "=" | "->" | "=>" | "." | ".." | "!"
+             | ":" | "?" | "(" | ")" | "[" | "]" | "#[" ;
+             (* maximal munch: "->" before "-"; ".." before "." *)
+
+(* ───────────────────── indentation algorithm ───────────────────── *)
+(*
+   levels: stack starting at [0].
+   For each non-blank, non-comment line, measure its indent width W:
+     W == top          -> emit nothing
+     W >  top          -> emit INDENT, push W
+     W <  top          -> pop and emit DEDENT until top == W;
+                          if no open level equals W -> LexError
+   A line is "continuation" (no indent processing, no NEWLINE emitted) if the
+   previous logical line ends inside `(`, `[`, or after `,`? — NOT in soma:
+   there are no commas and no implicit continuations. Every physical line is
+   its own logical line. Multi-line lists are written on one line.
+   Blank lines and comment-only lines emit nothing at all.
+   Tabs in indentation -> LexError.
+   At EOF: pop all levels, emit DEDENT for each, then EOF.
+*)
+
+(* ───────────────────────── file / items ───────────────────────── *)
+
+file         = { attr } item { NL { NL } { attr } item } [ NL ] EOF ;
+attr         = "#[" identifier { identifier } "]" ;
+item         = "export"? { attr } item-body ;
+item-body    = fn | object | trait | error | enum | import | const | test ;
+
+(* ─────────────────────── fn signatures ─────────────────────── *)
+(* bare parameters, no parens, no commas; return after "->" *)
+
+fn           = "fn" NL INDENT signature NL INDENT block DEDENT DEDENT ;
+signature    = identifier [ "[" identifier { identifier } "]" ]
+               { param } [ "->" type ] ;
+param        = identifier ":" type ;
+trait-method = signature ;
+
+(* ─────────────────────── object / trait ─────────────────────── *)
+
+object       = "object" NL INDENT identifier
+               [ "[" identifier { identifier } "]" ] NL INDENT
+               member { NL { NL } member }
+               DEDENT DEDENT ;
+member       = field | method ;
+field        = identifier ":" type ;
+method       = signature NL INDENT block DEDENT ;
+
+trait        = "trait" NL INDENT identifier NL INDENT
+               ( identifier trait-method ) { NL { NL } identifier trait-method }
+               DEDENT DEDENT ;
+
+error        = "error" NL INDENT identifier NL INDENT
+               identifier { NL identifier } DEDENT DEDENT ;
+
+enum         = "enum" NL INDENT identifier NL INDENT
+               variant { NL variant } DEDENT DEDENT ;
+variant      = identifier [ "(" type { type } ")" ] ;
+
+(* ───────────────────────── import ───────────────────────── *)
+
+import       = "import" NL INDENT path-node { NL path-node } DEDENT ;
+path-node    = identifier ( ":" identifier )? [ NL INDENT path-node { NL path-node } DEDENT ] ;
+
+(* ───────────────────────── const / test ───────────────────────── *)
+
+const        = "const" NL INDENT const-def { NL const-def } DEDENT ;
+const-def    = identifier "=" expr ;
+
+test         = "test" NL INDENT test-case { NL { NL } test-case } DEDENT ;
+test-case    = string NL INDENT block DEDENT ;
+
+(* ───────────────────────── statements ───────────────────────── *)
+
+block        = stmt { NL { NL } stmt } ;
+stmt         = assign | while | for | loop | if-stmt | match | return
+             | break | continue | expr ;
+
+assign       = postfix "=" expr ;              (* target: name / field / index *)
+while        = "while" expr NL INDENT block DEDENT ;
+for          = "for" identifier "in" expr NL INDENT block DEDENT ;
+loop         = "loop" NL INDENT block DEDENT ;
+if-stmt      = "if" expr ( "=>" simple-stmt | NL INDENT block DEDENT )
+               { "elif" expr ( "=>" simple-stmt | NL INDENT block DEDENT ) }
+               [ "else" ( "=>" simple-stmt | NL INDENT block DEDENT ) ] ;
+match        = "match" expr NL INDENT arm { NL { NL } arm } DEDENT ;
+arm          = pattern "=>" stmt ;
+pattern      = identifier [ "(" identifier { identifier } ")" ] ;
+return       = "return" [ expr ] ;
+simple-stmt  = expr | return | break | continue ;
+
+(* ───────────────────────── expressions ───────────────────────── *)
+(* precedence, low → high:
+     1  lambda       ( x => e , (a b) => e )        right assoc
+     2  or
+     3  and
+     4  not          (prefix)
+     5  range        (..b , a..b)                    non-assoc
+     6  equality     == !=
+     7  comparison   < > <= >=
+     8  additive     + -
+     9  multiplicative * / %
+    10  unary        -x
+    11  postfix      call, index, field, "!"
+    12  primary *)
+
+expr         = lambda | binop ;
+lambda       = identifier "=>" expr
+             | "(" identifier { identifier } ")" "=>" expr ;
+binop        = ... precedence climbing, left assoc except lambda ...
+postfix      = primary { call | index | field | "!" } ;
+call         = "(" [ arg { arg } ] ")" ;
+arg          = [ identifier "=" ] expr ;        (* named ctor arg *)
+index        = "[" expr "]" ;
+field        = "." identifier ;
+primary      = int | float | string | fstring | multiline
+             | "true" | "false" | "null"
+             | "self" | identifier
+             | "(" expr ")" | list | "if" expr "=>" expr [ "else" expr ] ;
+list         = "[" [ expr { expr } | expr "for" identifier "in" expr ] "]" ;
+
+(* ─────────────────── error handling (05-errors) ─────────────────── *)
+(* "expr!"        postfix propagate — parsed as part of postfix
+   "expr ! stmt"  handler: after a postfix "!", if another expression or a
+                  simple statement follows ON THE SAME LINE, it is the handler.
+   The parser represents both via ExprKind::Propagate plus the caller's context;
+   desugar/errors.rs lowers them. *)
+
+(* ───────────────────── .psoma (internal IR) ───────────────────── *)
+(* Lowered form: explicit braces, semicolons, commas.
+   Indent/Dedent disappear. See src/desugar/psoma.rs. *)
