@@ -1,0 +1,16 @@
+object
+  Stack[T]
+    items: T[]
+
+    push item: T -> !
+      self.items + item
+      return
+
+fn
+  create_stack[T] -> Stack[T]
+    return Stack[T](items=[])
+
+test
+  "generics"
+    s = create_stack[int]()
+    s.push(1)!

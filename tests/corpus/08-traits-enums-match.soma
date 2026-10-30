@@ -1,0 +1,19 @@
+trait
+  Animal
+    speak -> string
+
+enum
+  Shape
+    Circle(float)
+    Rectangle(float float)
+
+fn
+  describe s: Shape -> float
+    match s
+      Circle(r) => return 3.14 * r * r
+      Rectangle(w h) => return w * h
+
+test
+  "enums"
+    s = Circle(2.0)
+    a = describe(s)

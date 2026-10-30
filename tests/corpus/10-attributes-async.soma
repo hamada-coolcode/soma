@@ -1,0 +1,9 @@
+fn
+  #[async]
+  #[test_only]
+  fetch_data url: string -> string
+    return "data"
+
+test
+  "attributes"
+    d = fetch_data("http")

@@ -1,0 +1,9 @@
+fn
+  get_item index: int -> int?
+    if index < 0 => return null
+    return 42
+
+test
+  "optionals"
+    val = get_item(0)
+    if val != null => print(val)
