@@ -2,6 +2,8 @@
 
 pub mod scope;
 pub mod symbol;
+pub mod warnings;
+pub mod flow;
 
 pub use scope::Scope;
 pub use symbol::{Symbol, SymbolKind};

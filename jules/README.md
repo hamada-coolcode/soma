@@ -75,3 +75,25 @@ A task is accepted only if:
 4. the PR description shows the new `cargo test` output.
 
 Merging is done by the maintainer, never by a "merge everything" session.
+
+## Wave v3 (tasks 14, 16-25)
+
+These run after the v2 merges; they are file-disjoint from each other and from
+the v2 lanes still in flight.
+
+| # | Brief | Owns | Depends on |
+| --- | --- | --- | --- |
+| 14 | [14-match-check.md](tasks/v3/14-match-check.md) | `src/types/check_match.rs` | v2 task 12 |
+| 16 | [16-formatter.md](tasks/v3/16-formatter.md) | `src/fmt/**`, `tests/fmt.rs` | none |
+| 17 | [17-module-loader.md](tasks/v3/17-module-loader.md) | `src/loader.rs`, `src/driver.rs`, `src/cli.rs` | v2 task 08 |
+| 18 | [18-parse-recovery.md](tasks/v3/18-parse-recovery.md) | `src/parse/recover.rs`, `expr.rs`, `blocks.rs` | none |
+| 19 | [19-warnings-flow.md](tasks/v3/19-warnings-flow.md) | `src/resolve/{warnings,flow}.rs`, `mod.rs` | v2 task 09 |
+| 20 | [20-property-tests.md](tasks/v3/20-property-tests.md) | `tests/props.rs`, `tests/corpus/fuzz/**` | none |
+| 21 | [21-span-map.md](tasks/v3/21-span-map.md) | `src/desugar/psoma.rs`, `src/diag/sourcemap.rs` | v2 task 07 |
+| 22 | [22-json-dump.md](tasks/v3/22-json-dump.md) | `src/emit_json.rs`, `tests/json_dump.rs` | none |
+| 23 | [23-suggestions.md](tasks/v3/23-suggestions.md) | `src/diag/suggest.rs`, `tests/suggest.rs` | v2 task 09 |
+| 24 | [24-test-runner.md](tasks/v3/24-test-runner.md) | `src/testrun.rs`, `tests/testrun.rs` | v2 task 15 |
+| 25 | [25-ast-validate.md](tasks/v3/25-ast-validate.md) | `src/ast/validate.rs`, `tests/validate.rs` | none |
+
+Stub files for every owned module already exist at HEAD and compile; fill the
+bodies, keep the signatures. `src/cli.rs` belongs to task 17 alone this wave.

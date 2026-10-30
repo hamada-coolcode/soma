@@ -2,6 +2,7 @@ pub mod blocks;
 pub mod expr;
 pub mod items;
 pub mod pattern;
+pub mod recover;
 pub mod signature;
 pub mod types;
 pub mod util;
