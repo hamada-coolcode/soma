@@ -1,0 +1,3 @@
+fn
+  output s: string -> !
+  input[T] prompt: string -> T!

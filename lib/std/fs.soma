@@ -1,0 +1,8 @@
+object
+  File
+    path: string
+
+fn
+  read -> string[]!
+  write s: string -> !
+  exists -> bool

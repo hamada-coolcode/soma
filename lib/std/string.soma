@@ -1,0 +1,5 @@
+fn
+  len -> int
+  contains s: string -> bool
+  lower -> string
+  split sep: string -> string[]
