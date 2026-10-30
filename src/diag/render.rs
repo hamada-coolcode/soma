@@ -64,6 +64,10 @@ pub fn render(diag: &Diagnostic, map: &SourceMap) -> String {
         report = report.with_help(help.clone());
     }
 
+    if let Some(code) = &diag.code {
+        report = report.with_code(code.as_str());
+    }
+
     let mut vec = Vec::new();
     report.finish().write(&mut cache, &mut vec).unwrap();
     String::from_utf8(vec).unwrap()
