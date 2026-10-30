@@ -1,0 +1,17 @@
+error
+  MyError
+    NotFound
+    BadInput
+
+fn
+  do_thing bad: bool -> MyError!int
+    if bad => return NotFound
+    return 1
+
+  wrap -> !
+    val = do_thing(true) ! return
+    val2 = do_thing(false)!
+
+test
+  "errors"
+    wrap()!
