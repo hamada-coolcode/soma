@@ -103,13 +103,12 @@ pub fn scan_tokens(src: &str) -> Result<Vec<Token>, LexError> {
         }
 
         // string or fstring
-        if b == b'"' {
-            if let Some((tok, next_idx)) = literal::scan_string(src, i)? {
+        if b == b'"'
+            && let Some((tok, next_idx)) = literal::scan_string(src, i)? {
                 tokens.push(tok);
                 i = next_idx;
                 continue;
             }
-        }
 
         // identifiers
         if b.is_ascii_alphabetic() || b == b'_' {
@@ -124,22 +123,20 @@ pub fn scan_tokens(src: &str) -> Result<Vec<Token>, LexError> {
             ));
             continue;
         }
-        if b == b'f' && i + 1 < len && bytes[i + 1] == b'"' {
-            if let Some((tok, next_idx)) = literal::scan_fstring(src, i)? {
+        if b == b'f' && i + 1 < len && bytes[i + 1] == b'"'
+            && let Some((tok, next_idx)) = literal::scan_fstring(src, i)? {
                 tokens.push(tok);
                 i = next_idx;
                 continue;
             }
-        }
 
         // numbers
-        if b.is_ascii_digit() {
-            if let Some((tok, next_idx)) = literal::scan_number(src, i) {
+        if b.is_ascii_digit()
+            && let Some((tok, next_idx)) = literal::scan_number(src, i) {
                 tokens.push(tok);
                 i = next_idx;
                 continue;
             }
-        }
 
         // operators
         if let Some((op, next_idx)) = symbol::scan_op(src, i) {
