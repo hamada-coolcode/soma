@@ -62,10 +62,10 @@ pub fn scan_string(src: &str, start: usize) -> Result<Option<(Token, usize)>, Le
             }
             end += 1;
         }
-        return Err(LexError {
+        Err(LexError {
             message: "Unterminated multiline string".to_string(),
             span: Span::new(start, bytes.len()),
-        });
+        })
     } else {
         // Standard string
         let mut end = start + 1;
@@ -114,10 +114,10 @@ pub fn scan_string(src: &str, start: usize) -> Result<Option<(Token, usize)>, Le
             }
             end += 1;
         }
-        return Err(LexError {
+        Err(LexError {
             message: "Unterminated string literal".to_string(),
             span: Span::new(start, bytes.len()),
-        });
+        })
     }
 }
 
