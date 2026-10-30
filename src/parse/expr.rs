@@ -1,4 +1,4 @@
-use crate::ast::expr::{Arg, Arm, BinOp, Block, Expr, ExprKind, Pattern, Stmt, StmtKind, UnOp};
+use crate::ast::expr::{Arg, Arm, BinOp, Block, Expr, ExprKind, Stmt, StmtKind, UnOp};
 use crate::diag::Span;
 use crate::lexer::{Op, TokKind};
 
