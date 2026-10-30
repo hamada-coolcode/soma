@@ -1,16 +1,16 @@
 //! Name resolution (owned by task 09).
 
+pub mod flow;
 pub mod scope;
 pub mod symbol;
 pub mod warnings;
-pub mod flow;
 
 pub use scope::Scope;
 pub use symbol::{Symbol, SymbolKind};
 
 use crate::ast::expr::{Block, Expr, ExprKind, Stmt, StmtKind};
-use crate::ast::item::{Item, ItemKind, Name, FnDef};
-use crate::ast::ty::{TypeRepr, TypeKind};
+use crate::ast::item::{FnDef, Item, ItemKind, Name};
+use crate::ast::ty::{TypeKind, TypeRepr};
 use crate::diag::{Diagnostic, ErrorKind};
 
 struct Resolver {
@@ -22,7 +22,9 @@ impl Resolver {
     fn new() -> Self {
         let mut scope = Scope::new();
         // Primitive type names are always in scope; user types arrive in pass 1.
-        for prim in ["int", "uint", "float", "bool", "string", "null", "void", "Self"] {
+        for prim in [
+            "int", "uint", "float", "bool", "string", "null", "void", "Self",
+        ] {
             scope.define(Symbol {
                 name: prim.to_string(),
                 kind: SymbolKind::Type,
@@ -123,7 +125,10 @@ impl Resolver {
     fn resolve_fn(&mut self, f: &FnDef, is_method: bool) {
         self.scope.push();
         if is_method {
-            let self_name = Name { text: "self".to_string(), span: f.name.span };
+            let self_name = Name {
+                text: "self".to_string(),
+                span: f.name.span,
+            };
             self.define(&self_name, SymbolKind::Local, true);
         }
         for g in &f.generics {
@@ -202,10 +207,7 @@ impl Resolver {
                     if !sym.mutable {
                         self.diags.push(Diagnostic::new(
                             ErrorKind::Other,
-                            format!(
-                                "`{}` is a read-only parameter; bind a new local",
-                                n.text
-                            ),
+                            format!("`{}` is a read-only parameter; bind a new local", n.text),
                             n.span,
                         ));
                     }
@@ -226,7 +228,12 @@ impl Resolver {
 
     fn resolve_expr(&mut self, e: &Expr) {
         match &e.kind {
-            ExprKind::Int(_) | ExprKind::Float(_) | ExprKind::Str(_) | ExprKind::Bool(_) | ExprKind::Null | ExprKind::FStr(_) => {}
+            ExprKind::Int(_)
+            | ExprKind::Float(_)
+            | ExprKind::Str(_)
+            | ExprKind::Bool(_)
+            | ExprKind::Null
+            | ExprKind::FStr(_) => {}
             ExprKind::Name(n) => {
                 if self.scope.lookup(&n.text).is_none() {
                     self.diags.push(Diagnostic::new(
@@ -269,8 +276,12 @@ impl Resolver {
                 self.resolve_expr(rhs);
             }
             ExprKind::Range { from, to } => {
-                if let Some(f) = from { self.resolve_expr(f); }
-                if let Some(t) = to { self.resolve_expr(t); }
+                if let Some(f) = from {
+                    self.resolve_expr(f);
+                }
+                if let Some(t) = to {
+                    self.resolve_expr(t);
+                }
             }
             ExprKind::Lambda { params, body } => {
                 self.scope.push();
@@ -288,7 +299,12 @@ impl Resolver {
                 self.scope.pop();
             }
             ExprKind::Propagate(expr) => self.resolve_expr(expr),
-            ExprKind::If { cond, then, elifs, else_ } => {
+            ExprKind::If {
+                cond,
+                then,
+                elifs,
+                else_,
+            } => {
                 self.resolve_expr(cond);
                 self.resolve_block(then);
                 for (c, b) in elifs {
@@ -306,11 +322,8 @@ impl Resolver {
         match &t.kind {
             TypeKind::Named { name, generics } => {
                 if self.scope.lookup(&name.text).is_none() {
-                    self.diags.push(Diagnostic::new(
-                        ErrorKind::Other,
-                        "E0302",
-                        name.span,
-                    ));
+                    self.diags
+                        .push(Diagnostic::new(ErrorKind::Other, "E0302", name.span));
                 }
                 for g in generics {
                     self.resolve_type(g);
@@ -354,18 +367,27 @@ mod tests {
     use crate::diag::Span;
 
     fn mk_name(s: &str) -> Name {
-        Name { text: s.to_string(), span: Span::new(0, 1) }
+        Name {
+            text: s.to_string(),
+            span: Span::new(0, 1),
+        }
     }
 
     fn mk_expr(k: ExprKind) -> Expr {
-        Expr { kind: k, span: Span::new(0, 1) }
+        Expr {
+            kind: k,
+            span: Span::new(0, 1),
+        }
     }
 
     #[test]
     fn test_undefined_name() {
         let e = mk_expr(ExprKind::Name(mk_name("x")));
         let block = Block {
-            stmts: vec![Stmt { kind: StmtKind::Expr(e), span: Span::new(0, 1) }],
+            stmts: vec![Stmt {
+                kind: StmtKind::Expr(e),
+                span: Span::new(0, 1),
+            }],
             span: Span::new(0, 1),
         };
         let f = FnDef {
@@ -375,7 +397,11 @@ mod tests {
             ret: None,
             body: block,
         };
-        let item = Item { attrs: vec![], kind: ItemKind::Fn(f), span: Span::new(0, 1) };
+        let item = Item {
+            attrs: vec![],
+            kind: ItemKind::Fn(f),
+            span: Span::new(0, 1),
+        };
         let diags = check(&[item]);
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("undefined name"));
@@ -386,7 +412,10 @@ mod tests {
         let p = mk_name("p");
         let param = Param {
             name: p.clone(),
-            ty: crate::ast::ty::TypeRepr { kind: crate::ast::ty::TypeKind::Never, span: Span::new(0, 1) }
+            ty: crate::ast::ty::TypeRepr {
+                kind: crate::ast::ty::TypeKind::Never,
+                span: Span::new(0, 1),
+            },
         };
         let assign = Stmt {
             kind: StmtKind::Assign {
@@ -406,7 +435,11 @@ mod tests {
             ret: None,
             body: block,
         };
-        let item = Item { attrs: vec![], kind: ItemKind::Fn(f), span: Span::new(0, 1) };
+        let item = Item {
+            attrs: vec![],
+            kind: ItemKind::Fn(f),
+            span: Span::new(0, 1),
+        };
         let diags = check(&[item]);
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("read-only parameter"));
@@ -418,20 +451,33 @@ mod tests {
         let x2 = mk_name("x");
         let param1 = Param {
             name: x1,
-            ty: crate::ast::ty::TypeRepr { kind: crate::ast::ty::TypeKind::Never, span: Span::new(0, 1) }
+            ty: crate::ast::ty::TypeRepr {
+                kind: crate::ast::ty::TypeKind::Never,
+                span: Span::new(0, 1),
+            },
         };
         let param2 = Param {
             name: x2,
-            ty: crate::ast::ty::TypeRepr { kind: crate::ast::ty::TypeKind::Never, span: Span::new(0, 1) }
+            ty: crate::ast::ty::TypeRepr {
+                kind: crate::ast::ty::TypeKind::Never,
+                span: Span::new(0, 1),
+            },
         };
         let f = FnDef {
             name: mk_name("f"),
             generics: vec![],
             params: vec![param1, param2],
             ret: None,
-            body: Block { stmts: vec![], span: Span::new(0, 1) },
+            body: Block {
+                stmts: vec![],
+                span: Span::new(0, 1),
+            },
         };
-        let item = Item { attrs: vec![], kind: ItemKind::Fn(f), span: Span::new(0, 1) };
+        let item = Item {
+            attrs: vec![],
+            kind: ItemKind::Fn(f),
+            span: Span::new(0, 1),
+        };
         let diags = check(&[item]);
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("duplicate definition"));

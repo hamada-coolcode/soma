@@ -110,10 +110,18 @@ impl TypeTable {
                     .iter()
                     .map(|&id| self.display(&self.resolve(id)))
                     .collect();
-                format!("({}) {}", param_strs.join(", "), self.display(&self.resolve(*ret)))
+                format!(
+                    "({}) {}",
+                    param_strs.join(", "),
+                    self.display(&self.resolve(*ret))
+                )
             }
             Type::ErrorUnion { err, ok } => {
-                format!("{}!{}", self.display(&self.resolve(*err)), self.display(&self.resolve(*ok)))
+                format!(
+                    "{}!{}",
+                    self.display(&self.resolve(*err)),
+                    self.display(&self.resolve(*ok))
+                )
             }
             Type::Var(_) => "_".to_string(),
         }
@@ -169,12 +177,18 @@ impl TypeTable {
             TypeKind::Fn { params, ret } => {
                 let param_ids = params.iter().map(|p| self.from_repr(p, env)).collect();
                 let ret_id = self.from_repr(ret, env);
-                self.intern(Type::Fn { params: param_ids, ret: ret_id })
+                self.intern(Type::Fn {
+                    params: param_ids,
+                    ret: ret_id,
+                })
             }
             TypeKind::ErrorUnion { err, ok } => {
                 let err_id = self.from_repr(err, env);
                 let ok_id = self.from_repr(ok, env);
-                self.intern(Type::ErrorUnion { err: err_id, ok: ok_id })
+                self.intern(Type::ErrorUnion {
+                    err: err_id,
+                    ok: ok_id,
+                })
             }
             TypeKind::Never => self.intern(Type::Never),
         }
@@ -195,10 +209,16 @@ mod tests {
         let t_opt = table.intern(Type::Optional(t_int));
         assert_eq!(table.display_id(t_opt), "int?");
 
-        let t_err = table.intern(Type::ErrorUnion { err: t_int, ok: t_opt });
+        let t_err = table.intern(Type::ErrorUnion {
+            err: t_int,
+            ok: t_opt,
+        });
         assert_eq!(table.display_id(t_err), "int!int?");
 
-        let t_fn = table.intern(Type::Fn { params: vec![t_int], ret: t_list });
+        let t_fn = table.intern(Type::Fn {
+            params: vec![t_int],
+            ret: t_list,
+        });
         assert_eq!(table.display_id(t_fn), "(int) int[]");
     }
 
@@ -209,8 +229,14 @@ mod tests {
         let v2 = table.fresh_var();
         let _t_int = table.intern(Type::Int);
 
-        let v1_id = match table.ty(v1) { Type::Var(id) => *id, _ => unreachable!() };
-        let v2_id = match table.ty(v2) { Type::Var(id) => *id, _ => unreachable!() };
+        let v1_id = match table.ty(v1) {
+            Type::Var(id) => *id,
+            _ => unreachable!(),
+        };
+        let v2_id = match table.ty(v2) {
+            Type::Var(id) => *id,
+            _ => unreachable!(),
+        };
 
         table.set_var(v2_id, Type::Int);
         table.set_var(v1_id, Type::Var(v2_id));

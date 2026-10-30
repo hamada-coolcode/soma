@@ -120,11 +120,12 @@ pub fn scan_tokens(src: &str) -> Result<Vec<Token>, LexError> {
 
         // string or fstring
         if b == b'"'
-            && let Some((tok, next_idx)) = literal::scan_string(src, i)? {
-                tokens.push(tok);
-                i = next_idx;
-                continue;
-            }
+            && let Some((tok, next_idx)) = literal::scan_string(src, i)?
+        {
+            tokens.push(tok);
+            i = next_idx;
+            continue;
+        }
 
         // identifiers
         if b.is_ascii_alphabetic() || b == b'_' {
@@ -139,20 +140,24 @@ pub fn scan_tokens(src: &str) -> Result<Vec<Token>, LexError> {
             ));
             continue;
         }
-        if b == b'f' && i + 1 < len && bytes[i + 1] == b'"'
-            && let Some((tok, next_idx)) = literal::scan_fstring(src, i)? {
-                tokens.push(tok);
-                i = next_idx;
-                continue;
-            }
+        if b == b'f'
+            && i + 1 < len
+            && bytes[i + 1] == b'"'
+            && let Some((tok, next_idx)) = literal::scan_fstring(src, i)?
+        {
+            tokens.push(tok);
+            i = next_idx;
+            continue;
+        }
 
         // numbers
         if b.is_ascii_digit()
-            && let Some((tok, next_idx)) = literal::scan_number(src, i) {
-                tokens.push(tok);
-                i = next_idx;
-                continue;
-            }
+            && let Some((tok, next_idx)) = literal::scan_number(src, i)
+        {
+            tokens.push(tok);
+            i = next_idx;
+            continue;
+        }
 
         // operators
         if let Some((op, next_idx)) = symbol::scan_op(src, i) {
@@ -266,10 +271,7 @@ mod tests {
         let tokens = scan_tokens(src).unwrap();
         assert_eq!(
             tokens.iter().map(|t| t.kind.clone()).collect::<Vec<_>>(),
-            vec![
-                TokKind::Ident("a".to_string()),
-                TokKind::Eof,
-            ]
+            vec![TokKind::Ident("a".to_string()), TokKind::Eof,]
         );
     }
 
@@ -353,11 +355,29 @@ mod tests {
     fn test_scan_fuzz() {
         // Pseudo-property test to ensure it doesn't panic on random byte sequences
         let inputs = [
-            "\"", "\"\"", "\"a", "\"\\", "f\"", "f\"a", "f\"{", "f\"{a", "f\"{a}",
-            "f\"{\"", "f\"{\\\"}", "f\"{a + \"}",
-            "#", "#[", "#[a",
-            " ", "  ", "\t", "\r", "\n", "\r\n",
-            "1.2.3", "a b c",
+            "\"",
+            "\"\"",
+            "\"a",
+            "\"\\",
+            "f\"",
+            "f\"a",
+            "f\"{",
+            "f\"{a",
+            "f\"{a}",
+            "f\"{\"",
+            "f\"{\\\"}",
+            "f\"{a + \"}",
+            "#",
+            "#[",
+            "#[a",
+            " ",
+            "  ",
+            "\t",
+            "\r",
+            "\n",
+            "\r\n",
+            "1.2.3",
+            "a b c",
         ];
         for src in inputs {
             let _ = scan_tokens(src);

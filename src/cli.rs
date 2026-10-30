@@ -62,7 +62,11 @@ fn parse_cmd(args: &[String]) -> ExitCode {
     let src = match read(path) {
         Ok(s) => s,
         Err(e) => {
-            let diag = crate::diag::Diagnostic::new(crate::diag::ErrorKind::Io, e, crate::diag::Span::new(0, 0));
+            let diag = crate::diag::Diagnostic::new(
+                crate::diag::ErrorKind::Io,
+                e,
+                crate::diag::Span::new(0, 0),
+            );
             eprintln!("{}", crate::driver::render(&diag, path, ""));
             return ExitCode::from(2);
         }
@@ -103,7 +107,11 @@ fn check_cmd(args: &[String]) -> ExitCode {
     let src = match read(path) {
         Ok(s) => s,
         Err(e) => {
-            let diag = crate::diag::Diagnostic::new(crate::diag::ErrorKind::Io, e, crate::diag::Span::new(0, 0));
+            let diag = crate::diag::Diagnostic::new(
+                crate::diag::ErrorKind::Io,
+                e,
+                crate::diag::Span::new(0, 0),
+            );
             eprintln!("{}", crate::driver::render(&diag, path, ""));
             return ExitCode::from(2);
         }

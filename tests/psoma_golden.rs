@@ -47,7 +47,11 @@ fn test_examples_output_nonempty() {
             let actual_psoma = soma::desugar::psoma::emit(&items);
 
             assert!(!actual_psoma.is_empty(), "Empty output for {}", f.display());
-            assert!(actual_psoma.contains("fn "), "No fn found in output for {}", f.display());
+            assert!(
+                actual_psoma.contains("fn "),
+                "No fn found in output for {}",
+                f.display()
+            );
         }
     }
     assert!(count >= 14, "Expected at least 14 examples");
