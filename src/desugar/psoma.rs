@@ -81,11 +81,17 @@ fn emit_object_def(o: &ObjectDef, indent: usize) -> String {
     out.push_str(" {\n");
     for field in &o.fields {
         out.push_str(&"  ".repeat(indent + 1));
-        out.push_str(&format!("{}: {},\n", field.name.text, emit_ty(&field.ty)));
+        out.push_str(&format!("{}: {};\n", field.name.text, emit_ty(&field.ty)));
     }
     for method in &o.methods {
         out.push_str(&"  ".repeat(indent + 1));
-        out.push_str(&emit_fn_def(method, indent + 1));
+        // Object methods drop the `fn ` prefix in .psoma
+        let fn_str = emit_fn_def(method, indent + 1);
+        if fn_str.starts_with("fn ") {
+            out.push_str(&fn_str[3..]);
+        } else {
+            out.push_str(&fn_str);
+        }
         out.push('\n');
     }
     out.push_str(&"  ".repeat(indent));
@@ -258,7 +264,7 @@ fn emit_stmt(stmt: &Stmt, indent: usize) -> String {
         }
         StmtKind::While { cond, body } => {
             format!(
-                "while {} {}",
+                "while ({}) {}",
                 emit_expr(cond, 0, indent),
                 emit_block(body, indent)
             )
@@ -275,7 +281,7 @@ fn emit_stmt(stmt: &Stmt, indent: usize) -> String {
         StmtKind::Return(Some(e)) => format!("return {};", emit_expr(e, 0, indent)),
         StmtKind::Return(None) => "return;".to_string(),
         StmtKind::Match { scrutinee, arms } => {
-            let mut out = format!("match {} {{\n", emit_expr(scrutinee, 0, indent));
+            let mut out = format!("match ({}) {{\n", emit_expr(scrutinee, 0, indent));
             for arm in arms {
                 out.push_str(&"  ".repeat(indent + 1));
                 out.push_str(&emit_pattern(&arm.pattern));
@@ -377,54 +383,29 @@ fn emit_expr(expr: &Expr, prec: u8, indent: usize) -> String {
             (format!("{}{}", op_str, emit_expr(operand, 80, indent)), 80)
         }
         ExprKind::Binary { op, lhs, rhs } => {
-            let (op_str, my_prec) = match op {
-                BinOp::Mul | BinOp::Div | BinOp::Rem => (
-                    match op {
-                        BinOp::Mul => " * ",
-                        BinOp::Div => " / ",
-                        BinOp::Rem => " % ",
-                        _ => unreachable!(),
-                    },
-                    70,
-                ),
-                BinOp::Add | BinOp::Sub => (
-                    match op {
-                        BinOp::Add => " + ",
-                        BinOp::Sub => " - ",
-                        _ => unreachable!(),
-                    },
-                    60,
-                ),
-                BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge => (
-                    match op {
-                        BinOp::Lt => " < ",
-                        BinOp::Gt => " > ",
-                        BinOp::Le => " <= ",
-                        BinOp::Ge => " >= ",
-                        _ => unreachable!(),
-                    },
-                    50,
-                ),
-                BinOp::Eq | BinOp::Ne => (
-                    match op {
-                        BinOp::Eq => " == ",
-                        BinOp::Ne => " != ",
-                        _ => unreachable!(),
-                    },
-                    40,
-                ),
-                BinOp::And => (" and ", 30),
-                BinOp::Or => (" or ", 20),
+            let op_str = match op {
+                BinOp::Mul => " * ",
+                BinOp::Div => " / ",
+                BinOp::Rem => " % ",
+                BinOp::Add => " + ",
+                BinOp::Sub => " - ",
+                BinOp::Lt => " < ",
+                BinOp::Gt => " > ",
+                BinOp::Le => " <= ",
+                BinOp::Ge => " >= ",
+                BinOp::Eq => " == ",
+                BinOp::Ne => " != ",
+                BinOp::And => " and ",
+                BinOp::Or => " or ",
             };
-            // Left-associative: lhs needs same prec, rhs needs higher prec to not group left
             (
                 format!(
-                    "{}{}{}",
-                    emit_expr(lhs, my_prec, indent),
+                    "({}{}{})",
+                    emit_expr(lhs, 0, indent),
                     op_str,
-                    emit_expr(rhs, my_prec + 1, indent)
+                    emit_expr(rhs, 0, indent)
                 ),
-                my_prec,
+                100, // already parenthesized, so treat as highest precedence
             )
         }
         ExprKind::Range { from, to } => {
@@ -462,13 +443,13 @@ fn emit_expr(expr: &Expr, prec: u8, indent: usize) -> String {
             else_,
         } => {
             let mut out = format!(
-                "if {} {}",
+                "if ({}) {}",
                 emit_expr(cond, 0, indent),
                 emit_block(then, indent)
             );
             for (elif_cond, elif_block) in elifs {
                 out.push_str(&format!(
-                    " elif {} {}",
+                    " else if ({}) {}",
                     emit_expr(elif_cond, 0, indent),
                     emit_block(elif_block, indent)
                 ));
@@ -553,7 +534,7 @@ mod tests {
         };
         assert_eq!(
             emit_item(&item),
-            "fn add(a: int, b: int) -> int {\n  return a + b;\n}"
+            "fn add(a: int, b: int) -> int {\n  return (a + b);\n}"
         );
     }
 
@@ -599,7 +580,7 @@ mod tests {
         };
         assert_eq!(
             emit_item(&item),
-            "object Point {\n  x: int,\n  fn get_x(self: int) -> int {\n    return self.x;\n  }\n}"
+            "object Point {\n  x: int;\n  get_x(self: int) -> int {\n    return self.x;\n  }\n}"
         );
     }
 
@@ -652,7 +633,7 @@ mod tests {
         };
         assert_eq!(
             emit_expr(&e, 0, 0),
-            "if a {\n  1;\n} elif b {\n  2;\n} else {\n  3;\n}"
+            "if (a) {\n  1;\n} else if (b) {\n  2;\n} else {\n  3;\n}"
         );
     }
 
@@ -701,7 +682,7 @@ mod tests {
         };
         assert_eq!(
             emit_stmt(&stmt, 0),
-            "match x {\n  Some(v) => v;\n  None => 0;\n}"
+            "match (x) {\n  Some(v) => v;\n  None => 0;\n}"
         );
     }
 
@@ -775,6 +756,6 @@ mod tests {
             },
             span: s(),
         };
-        assert_eq!(emit_expr(&e, 0, 0), "|a, b| a + b");
+        assert_eq!(emit_expr(&e, 0, 0), "|a, b| (a + b)");
     }
 }
