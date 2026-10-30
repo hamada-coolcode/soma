@@ -14,10 +14,10 @@ fn test_golden_files() {
         let src = fs::read_to_string(&soma_path).unwrap();
         let expected_psoma = fs::read_to_string(&psoma_path).unwrap();
 
-        let tokens = soma::lexer::scan(&src).unwrap();
-        let items = soma::parse::parse_file(&tokens).unwrap();
-
-        let actual_psoma = soma::desugar::psoma::emit(&items);
+        // Go through the real driver path (parse -> lower -> emit) so the
+        // goldens cover the pipeline the CLI actually prints.
+        let parsed = soma::driver::parse_source(&format!("{name}.soma"), &src).unwrap();
+        let actual_psoma = soma::driver::emit_psoma(&parsed);
 
         assert_eq!(
             actual_psoma, expected_psoma,
