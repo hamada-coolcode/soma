@@ -19,14 +19,29 @@ pub struct Stmt {
 pub enum StmtKind {
     Expr(Expr),
     /// `x = e`, `x.f = e`, `x[i] = e`. `target` is a Name/Field/Index expr.
-    Assign { target: Expr, value: Expr },
-    While { cond: Expr, body: Block },
-    For { var: Name, iter: Expr, body: Block },
-    Loop { body: Block },
+    Assign {
+        target: Expr,
+        value: Expr,
+    },
+    While {
+        cond: Expr,
+        body: Block,
+    },
+    For {
+        var: Name,
+        iter: Expr,
+        body: Block,
+    },
+    Loop {
+        body: Block,
+    },
     Break,
     Continue,
     Return(Option<Expr>),
-    Match { scrutinee: Expr, arms: Vec<Arm> },
+    Match {
+        scrutinee: Expr,
+        arms: Vec<Arm>,
+    },
     /// Nested item blocks (import trees, error blocks) appearing in a body.
     Item(Item),
 }

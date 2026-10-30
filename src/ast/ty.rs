@@ -12,10 +12,7 @@ pub struct TypeRepr {
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeKind {
     /// `int`, `Shape`, `Stack[T]`
-    Named {
-        name: Name,
-        generics: Vec<TypeRepr>,
-    },
+    Named { name: Name, generics: Vec<TypeRepr> },
     /// `T[]` (size `None`) or `int[10]` (size `Some`)
     Array {
         elem: Box<TypeRepr>,
