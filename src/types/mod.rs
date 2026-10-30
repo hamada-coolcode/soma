@@ -8,7 +8,7 @@ pub mod ty;
 pub mod unify;
 
 pub use ty::{Type, TypeId, TypeTable};
-pub use unify::{unify, UnifyError};
+pub use unify::{UnifyError, unify};
 
 use crate::ast::item::Item;
 use crate::diag::Diagnostic;

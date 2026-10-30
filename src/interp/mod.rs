@@ -24,8 +24,7 @@ pub fn run_source(_name: &str, _src: &str) -> Result<RunOutput, Diagnostic> {
 }
 
 pub fn run_file(path: &str) -> Result<RunOutput, Diagnostic> {
-    let src = std::fs::read_to_string(path).map_err(|e| {
-        Diagnostic::new(ErrorKind::Io, format!("{path}: {e}"), Span::default())
-    })?;
+    let src = std::fs::read_to_string(path)
+        .map_err(|e| Diagnostic::new(ErrorKind::Io, format!("{path}: {e}"), Span::default()))?;
     run_source(path, &src)
 }
