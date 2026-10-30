@@ -3,11 +3,15 @@ use crate::ast::item::*;
 use crate::diag::Span;
 use crate::lexer::{Op, TokKind};
 use crate::parse::ParseError;
+use crate::parse::blocks::{expect_newline, last_span, parse_attrs};
 use crate::parse::util::Parser;
 use crate::parse::{expr, signature, types};
-use crate::parse::blocks::{expect_newline, parse_attrs, last_span};
 
-pub(crate) fn parse_object(p: &mut Parser, attrs: Vec<Attribute>, _start_span: Span) -> Result<Vec<Item>, ParseError> {
+pub(crate) fn parse_object(
+    p: &mut Parser,
+    attrs: Vec<Attribute>,
+    _start_span: Span,
+) -> Result<Vec<Item>, ParseError> {
     // One `object` block may declare several objects:
     //   object
     //     Circle
@@ -99,7 +103,7 @@ pub(crate) fn parse_object(p: &mut Parser, attrs: Vec<Attribute>, _start_span: S
                 generics,
                 fields,
                 methods, // Note: ast currently doesn't store member_attrs in ast/item.rs FieldDef or FnDef! The task brief says `attributes on members`. Let's assume there is no field for attributes on members in AST right now. If there's none, we still parse them to not fail, but we don't store them.
-                // Ah wait, is there? Let's check.
+                         // Ah wait, is there? Let's check.
             }),
             span: obj_start.join(last_span(p)),
         });
@@ -108,7 +112,11 @@ pub(crate) fn parse_object(p: &mut Parser, attrs: Vec<Attribute>, _start_span: S
     Ok(objs)
 }
 
-pub(crate) fn parse_trait(p: &mut Parser, attrs: Vec<Attribute>, start_span: Span) -> Result<Vec<Item>, ParseError> {
+pub(crate) fn parse_trait(
+    p: &mut Parser,
+    attrs: Vec<Attribute>,
+    start_span: Span,
+) -> Result<Vec<Item>, ParseError> {
     expect_newline(p)?;
     p.expect_indent()?;
     let name = p.expect_ident()?;
@@ -144,7 +152,11 @@ pub(crate) fn parse_trait(p: &mut Parser, attrs: Vec<Attribute>, start_span: Spa
     }])
 }
 
-pub(crate) fn parse_enum(p: &mut Parser, attrs: Vec<Attribute>, start_span: Span) -> Result<Vec<Item>, ParseError> {
+pub(crate) fn parse_enum(
+    p: &mut Parser,
+    attrs: Vec<Attribute>,
+    start_span: Span,
+) -> Result<Vec<Item>, ParseError> {
     expect_newline(p)?;
     p.expect_indent()?;
     let name = p.expect_ident()?;
@@ -232,7 +244,11 @@ fn parse_import_path_node(
     Ok(())
 }
 
-pub(crate) fn parse_import(p: &mut Parser, attrs: Vec<Attribute>, start_span: Span) -> Result<Vec<Item>, ParseError> {
+pub(crate) fn parse_import(
+    p: &mut Parser,
+    attrs: Vec<Attribute>,
+    start_span: Span,
+) -> Result<Vec<Item>, ParseError> {
     let mut imports = Vec::new();
     expect_newline(p)?;
     p.expect_indent()?;
@@ -246,7 +262,11 @@ pub(crate) fn parse_import(p: &mut Parser, attrs: Vec<Attribute>, start_span: Sp
     Ok(imports)
 }
 
-pub(crate) fn parse_const(p: &mut Parser, attrs: Vec<Attribute>, start_span: Span) -> Result<Vec<Item>, ParseError> {
+pub(crate) fn parse_const(
+    p: &mut Parser,
+    attrs: Vec<Attribute>,
+    start_span: Span,
+) -> Result<Vec<Item>, ParseError> {
     expect_newline(p)?;
     p.expect_indent()?;
     let mut consts = Vec::new();
@@ -267,7 +287,11 @@ pub(crate) fn parse_const(p: &mut Parser, attrs: Vec<Attribute>, start_span: Spa
     Ok(consts)
 }
 
-pub(crate) fn parse_test(p: &mut Parser, attrs: Vec<Attribute>, start_span: Span) -> Result<Vec<Item>, ParseError> {
+pub(crate) fn parse_test(
+    p: &mut Parser,
+    attrs: Vec<Attribute>,
+    start_span: Span,
+) -> Result<Vec<Item>, ParseError> {
     expect_newline(p)?;
     p.expect_indent()?;
     let mut tests = Vec::new();
@@ -309,12 +333,11 @@ pub(crate) fn parse_test(p: &mut Parser, attrs: Vec<Attribute>, start_span: Span
     Ok(tests)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lexer::{Token, Op, TokKind};
     use crate::diag::Span;
+    use crate::lexer::{Op, TokKind, Token};
 
     fn span() -> Span {
         Span::default()
@@ -405,7 +428,6 @@ mod tests {
             nl(),
             indent(),
             ident("method"),
-
             nl(),
             dedent(),
             dedent(),

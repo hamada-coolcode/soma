@@ -23,7 +23,12 @@ fn test_parse_ok() {
         .output()
         .expect("Failed to execute process");
 
-    assert!(output.status.success(), "stdout: {}, stderr: {}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stdout: {}, stderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 #[test]
@@ -77,5 +82,10 @@ fn test_check_ok() {
         .output()
         .expect("Failed to execute process");
 
-    assert!(output.status.success(), "stdout: {}, stderr: {}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stdout: {}, stderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
 }

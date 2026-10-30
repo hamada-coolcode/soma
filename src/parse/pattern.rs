@@ -6,8 +6,8 @@ use crate::ast::expr::{Arm, Pattern, Stmt};
 use crate::diag::Span;
 use crate::lexer::{Op, TokKind};
 
-use super::util::Parser;
 use super::ParseError;
+use super::util::Parser;
 
 /// Parse `Pattern => stmt`.
 pub fn match_arm(p: &mut Parser<'_>) -> Result<Arm, ParseError> {
@@ -16,7 +16,8 @@ pub fn match_arm(p: &mut Parser<'_>) -> Result<Arm, ParseError> {
     if !p.eat_op(Op::FatArrow) {
         return Err(ParseError {
             message: "expected `=>` after pattern".to_string(),
-            span: p.peek_span(), expected: vec![],
+            span: p.peek_span(),
+            expected: vec![],
         });
     }
     let body: Stmt = super::expr::stmt(p)?;
@@ -68,7 +69,8 @@ pub fn pattern(p: &mut Parser<'_>) -> Result<Pattern, ParseError> {
         if let Some(TokKind::Op(Op::LParen)) = p.peek_kind() {
             return Err(ParseError {
                 message: "nested calls in patterns are not allowed".to_string(),
-                span: p.peek_span(), expected: vec![],
+                span: p.peek_span(),
+                expected: vec![],
             });
         }
         p.expect_op(Op::RParen)?;
@@ -94,12 +96,12 @@ mod tests {
         if p.peek_kind().is_some() && p.peek_kind() != Some(&TokKind::Eof) {
             return Err(ParseError {
                 message: "trailing".to_string(),
-                span: p.peek_span(), expected: vec![],
+                span: p.peek_span(),
+                expected: vec![],
             });
         }
         Ok(pat)
     }
-
 
     #[test]
     fn test_pattern_wildcard() {
