@@ -1,4 +1,9 @@
 use std::collections::BTreeMap;
+use crate::ast::item::FnDef;
+use crate::ast::expr::Expr;
+use std::rc::Rc;
+use std::cell::RefCell;
+use crate::interp::eval::Environment;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -8,8 +13,13 @@ pub enum Value {
     Str(String),
     Null,
     Unit,
-    List(Vec<Value>),
-    Object(BTreeMap<String, Value>),
+    List(Rc<RefCell<Vec<Value>>>),
+    Object(Rc<RefCell<BTreeMap<String, Value>>>),
+    Variant(String, Vec<Value>),
+    Func(Rc<FnDef>),
+    Closure(Vec<String>, Box<Expr>, Rc<RefCell<Environment>>),
+    Builtin(&'static str),
+    Iterator(Rc<RefCell<Vec<Value>>>, Rc<RefCell<usize>>),
 }
 
 impl Value {
@@ -23,6 +33,9 @@ impl Value {
             Value::Unit => "!",
             Value::List(_) => "list",
             Value::Object(_) => "object",
+            Value::Variant(_, _) => "variant",
+            Value::Iterator(..) => "iterator",
+            Value::Func(_) | Value::Closure(..) | Value::Builtin(_) => "fn",
         }
     }
 }
