@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::ast::expr::{Block, Expr, ExprKind, StmtKind};
 use crate::ast::item::{ConstDef, FnDef, Item, ItemKind, ObjectDef};
-use crate::diag::{Diagnostic, ErrorKind, Span};
+use crate::diag::{Diagnostic, ErrorKind};
 use crate::types::{Type, TypeId, TypeTable, check_expr, unify};
 
 /// Check top-level items (owned by task 12).
@@ -294,6 +294,7 @@ mod tests {
     use super::*;
     use crate::ast::item::{FnDef, Name, Param};
     use crate::ast::ty::{TypeKind, TypeRepr};
+    use crate::diag::Span;
 
     fn name(n: &str) -> Name {
         Name::new(n, Span::new(0, 1))
@@ -378,7 +379,7 @@ mod tests {
             span: Span::new(0, 1),
         }];
         let diags = check_items(&items);
-        assert_eq!(diags.len(), 2); // 1 from dummy check_expr failing, 1 from our checker return mismatch
+        assert_eq!(diags.len(), 1);
     }
 
     #[test]

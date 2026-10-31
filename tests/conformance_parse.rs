@@ -1,7 +1,7 @@
 use soma::ast::item::{Item, ItemKind};
-use soma::driver::{Parsed, parse_source};
+use soma::driver::parse_source;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 fn check_spans(items: &[Item]) {
     for item in items {

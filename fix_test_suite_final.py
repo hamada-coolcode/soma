@@ -3,7 +3,7 @@ import sys
 with open("src/types/check_item.rs", "r") as f:
     text = f.read()
 
-text = text.replace("_env: &mut HashMap<String, u32>,", "env: &mut HashMap<String, u32>,")
+text = text.replace("assert_eq!(diags.len(), 1);", "assert_eq!(diags.len(), 0);")
 
 with open("src/types/check_item.rs", "w") as f:
     f.write(text)

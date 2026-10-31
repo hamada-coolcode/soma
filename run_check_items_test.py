@@ -1,14 +1,15 @@
 import sys
+import subprocess
 
 with open("src/types/check_item.rs", "w") as f:
     f.write("""use std::collections::{HashMap, HashSet};
 
-use crate::ast::item::{FnDef, Item, ItemKind, ObjectDef, ConstDef};
-use crate::ast::ty::{TypeKind, TypeRepr};
-use crate::ast::expr::{Expr, ExprKind, Stmt, StmtKind, Block};
+use crate::ast::expr::{Block, Expr, ExprKind, StmtKind};
+use crate::ast::item::{ConstDef, FnDef, Item, ItemKind, ObjectDef};
 use crate::diag::{Diagnostic, ErrorKind, Span};
 use crate::types::{check_expr, unify, Type, TypeId, TypeTable};
 
+/// Check top-level items (owned by task 12).
 pub fn check_items(items: &[Item]) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
     let mut table = TypeTable::new();
@@ -38,26 +39,23 @@ fn check_fn(
     f: &FnDef,
     diags: &mut Vec<Diagnostic>,
 ) {
-    // Check for duplicate generic params
     let mut generic_names = HashSet::new();
-    for gen in &f.generics {
-        if !generic_names.insert(&gen.text) {
+    for g in &f.generics {
+        if !generic_names.insert(&g.text) {
             diags.push(Diagnostic::new(
                 ErrorKind::Type,
-                format!("duplicate generic parameter `{}`", gen.text),
-                gen.span.clone(),
+                format!("duplicate generic parameter `{}`", g.text),
+                g.span.clone(),
             ));
         } else {
             let var = table.fresh_var();
             if let Type::Var(id) = table.resolve(var) {
-                env.insert(gen.text.clone(), id);
+                env.insert(g.text.clone(), id);
             }
         }
     }
 
-    // Check for duplicate param names
     let mut param_names = HashSet::new();
-    let mut param_types = Vec::new();
     for p in &f.params {
         if !param_names.insert(&p.name.text) {
             diags.push(Diagnostic::new(
@@ -66,32 +64,19 @@ fn check_fn(
                 p.name.span.clone(),
             ));
         }
-        let ty_id = table.from_repr(&p.ty, env);
-        param_types.push(ty_id);
+        let _ty_id = table.from_repr(&p.ty, env);
     }
 
-    // Resolve return type
     let ret_id = if let Some(ret) = &f.ret {
         table.from_repr(ret, env)
     } else {
         table.intern(Type::Unit)
     };
 
-    // Check main return
-    if f.name.text == "main" {
-        // main usually returns !
-        let never = table.intern(Type::Never);
-        if ret_id != never {
-             // Not strictly specified by task, but useful
-        }
-    }
-
-    // Check body (assignments etc)
     check_block(table, env, &f.body, ret_id, f.name.text == "main", diags);
 
-    // Remove generics from env
-    for gen in &f.generics {
-        env.remove(&gen.text);
+    for g in &f.generics {
+        env.remove(&g.text);
     }
 }
 
@@ -102,48 +87,46 @@ fn check_object(
     diags: &mut Vec<Diagnostic>,
 ) {
     let mut generic_names = HashSet::new();
-    for gen in &obj.generics {
-        if !generic_names.insert(&gen.text) {
+    for g in &obj.generics {
+        if !generic_names.insert(&g.text) {
             diags.push(Diagnostic::new(
                 ErrorKind::Type,
-                format!("duplicate generic parameter `{}`", gen.text),
-                gen.span.clone(),
+                format!("duplicate generic parameter `{}`", g.text),
+                g.span.clone(),
             ));
         } else {
             let var = table.fresh_var();
             if let Type::Var(id) = table.resolve(var) {
-                env.insert(gen.text.clone(), id);
+                env.insert(g.text.clone(), id);
             }
         }
     }
 
-    // Construct the object type to use as `self`
     let mut args = Vec::new();
-    for gen in &obj.generics {
-        if let Some(&id) = env.get(&gen.text) {
+    for g in &obj.generics {
+        if let Some(&id) = env.get(&g.text) {
             args.push(table.intern(Type::Var(id)));
         }
     }
-    let self_ty = table.intern(Type::Named {
+    let _self_ty = table.intern(Type::Named {
         name: obj.name.text.clone(),
         args,
     });
 
     for method in &obj.methods {
-        // check method
         let mut generic_names = HashSet::new();
         let mut method_env = env.clone();
-        for gen in &method.generics {
-            if !generic_names.insert(&gen.text) {
+        for g in &method.generics {
+            if !generic_names.insert(&g.text) {
                 diags.push(Diagnostic::new(
                     ErrorKind::Type,
-                    format!("duplicate generic parameter `{}`", gen.text),
-                    gen.span.clone(),
+                    format!("duplicate generic parameter `{}`", g.text),
+                    g.span.clone(),
                 ));
             } else {
                 let var = table.fresh_var();
                 if let Type::Var(id) = table.resolve(var) {
-                    method_env.insert(gen.text.clone(), id);
+                    method_env.insert(g.text.clone(), id);
                 }
             }
         }
@@ -157,9 +140,6 @@ fn check_object(
                     p.name.span.clone(),
                 ));
             }
-            if p.name.text == "self" {
-                // verify self type?
-            }
         }
 
         let ret_id = if let Some(ret) = &method.ret {
@@ -171,18 +151,18 @@ fn check_object(
         check_block(table, &mut method_env, &method.body, ret_id, false, diags);
     }
 
-    for gen in &obj.generics {
-        env.remove(&gen.text);
+    for g in &obj.generics {
+        env.remove(&g.text);
     }
 }
 
 fn check_const(
     table: &mut TypeTable,
-    env: &mut HashMap<String, u32>,
+    _env: &mut HashMap<String, u32>,
     c: &ConstDef,
     diags: &mut Vec<Diagnostic>,
 ) {
-    let _ = check_expr::check(table, &c.value).unwrap_or_else(|e| {
+    let _res = check_expr::check(table, &c.value).unwrap_or_else(|e| {
         diags.push(e);
         table.intern(Type::Never)
     });
@@ -190,7 +170,7 @@ fn check_const(
 
 fn check_block(
     table: &mut TypeTable,
-    env: &mut HashMap<String, u32>,
+    _env: &mut HashMap<String, u32>,
     block: &Block,
     ret_id: TypeId,
     is_main: bool,
@@ -198,7 +178,6 @@ fn check_block(
 ) {
     let mut has_return = false;
 
-    // We need to recursively look for propagates!
     fn check_propagate(
         table: &mut TypeTable,
         expr: &Expr,
@@ -207,16 +186,14 @@ fn check_block(
     ) {
         match &expr.kind {
             ExprKind::Propagate(inner) => {
-                let res = check_expr::check(table, inner).unwrap_or_else(|e| {
+                let _res = check_expr::check(table, inner).unwrap_or_else(|e| {
                     diags.push(e);
                     table.intern(Type::Never)
                 });
 
                 let ret_ty = table.resolve(ret_id);
                 match ret_ty {
-                    Type::ErrorUnion { err: err_b, .. } | Type::Never => {
-                        // Fine, if Never we don't care, if ErrorUnion we'd need to unify with err_b
-                    }
+                    Type::ErrorUnion { .. } | Type::Never => {}
                     _ => {
                         diags.push(Diagnostic::new(
                             ErrorKind::Type,
@@ -239,7 +216,6 @@ fn check_block(
                     check_propagate(table, &arg.value, ret_id, diags);
                 }
             }
-            // Add other cases...
             _ => {}
         }
     }
@@ -264,7 +240,10 @@ fn check_block(
                 } else {
                     let unit_ty = table.intern(Type::Unit);
                     let never_ty = table.intern(Type::Never);
-                    if ret_id != unit_ty && ret_id != never_ty {
+                    if unify::unify(table, ret_id, never_ty).is_ok()
+                        || unify::unify(table, ret_id, unit_ty).is_ok()
+                    {
+                    } else {
                         diags.push(Diagnostic::new(
                             ErrorKind::Type,
                             "missing return value",
@@ -292,13 +271,12 @@ fn check_block(
                 check_propagate(table, value, ret_id, diags);
             }
             StmtKind::Expr(e) => {
-                let _ = check_expr::check(table, e).unwrap_or_else(|err| {
+                let _res = check_expr::check(table, e).unwrap_or_else(|err| {
                     diags.push(err);
                     table.intern(Type::Never)
                 });
                 check_propagate(table, e, ret_id, diags);
             }
-            // Add more statement checks...
             _ => {}
         }
     }
@@ -312,6 +290,176 @@ fn check_block(
                 block.span.clone(),
             ));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::item::{FnDef, Name, Param};
+    use crate::ast::ty::{TypeKind, TypeRepr};
+    use crate::diag::Span;
+
+    fn name(n: &str) -> Name {
+        Name::new(n, Span::new(0, 1))
+    }
+
+    fn ty_int() -> TypeRepr {
+        TypeRepr {
+            kind: TypeKind::Named {
+                name: name("int"),
+                generics: vec![],
+            },
+            span: Span::new(0, 1),
+        }
+    }
+
+    fn ty_never() -> TypeRepr {
+        TypeRepr {
+            kind: TypeKind::Never,
+            span: Span::new(0, 1),
+        }
+    }
+
+    fn expr_int() -> Expr {
+        Expr {
+            kind: ExprKind::Int(42),
+            span: Span::new(0, 1),
+        }
+    }
+
+    fn expr_propagate() -> Expr {
+        Expr {
+            kind: ExprKind::Propagate(Box::new(expr_int())),
+            span: Span::new(0, 1),
+        }
+    }
+
+    #[test]
+    fn test_main_returns_never() {
+        let f = FnDef {
+            name: name("main"),
+            generics: vec![],
+            params: vec![],
+            ret: Some(ty_never()),
+            body: Block {
+                stmts: vec![crate::ast::expr::Stmt {
+                    kind: crate::ast::expr::StmtKind::Return(None),
+                    span: Span::new(0, 1),
+                }],
+                span: Span::new(0, 1),
+            },
+        };
+        let items = vec![Item {
+            attrs: vec![],
+            kind: ItemKind::Fn(f),
+            span: Span::new(0, 1),
+        }];
+        let diags = check_items(&items);
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_return_type_mismatch() {
+        let f = FnDef {
+            name: name("f"),
+            generics: vec![],
+            params: vec![],
+            ret: Some(ty_int()),
+            body: Block {
+                stmts: vec![crate::ast::expr::Stmt {
+                    kind: crate::ast::expr::StmtKind::Return(Some(Expr {
+                        kind: ExprKind::Str("wrong".to_string()),
+                        span: Span::new(0, 1),
+                    })),
+                    span: Span::new(0, 1),
+                }],
+                span: Span::new(0, 1),
+            },
+        };
+        let items = vec![Item {
+            attrs: vec![],
+            kind: ItemKind::Fn(f),
+            span: Span::new(0, 1),
+        }];
+        let diags = check_items(&items);
+        assert_eq!(diags.len(), 1);
+    }
+
+    #[test]
+    fn test_param_type_duplicate() {
+        let f = FnDef {
+            name: name("f"),
+            generics: vec![],
+            params: vec![
+                Param {
+                    name: name("x"),
+                    ty: ty_int(),
+                },
+                Param {
+                    name: name("x"),
+                    ty: ty_int(),
+                },
+            ],
+            ret: Some(ty_int()),
+            body: Block {
+                stmts: vec![crate::ast::expr::Stmt {
+                    kind: crate::ast::expr::StmtKind::Return(Some(expr_int())),
+                    span: Span::new(0, 1),
+                }],
+                span: Span::new(0, 1),
+            },
+        };
+        let items = vec![Item {
+            attrs: vec![],
+            kind: ItemKind::Fn(f),
+            span: Span::new(0, 1),
+        }];
+        let diags = check_items(&items);
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.message.contains("duplicate parameter name"))
+        );
+    }
+
+    #[test]
+    fn test_propagate_outside_fallible() {
+        let f = FnDef {
+            name: name("f"),
+            generics: vec![],
+            params: vec![],
+            ret: Some(ty_int()), // not fallible
+            body: Block {
+                stmts: vec![
+                    crate::ast::expr::Stmt {
+                        kind: crate::ast::expr::StmtKind::Expr(expr_propagate()),
+                        span: Span::new(0, 1),
+                    },
+                    crate::ast::expr::Stmt {
+                        kind: crate::ast::expr::StmtKind::Return(Some(expr_int())),
+                        span: Span::new(0, 1),
+                    },
+                ],
+                span: Span::new(0, 1),
+            },
+        };
+        let items = vec![Item {
+            attrs: vec![],
+            kind: ItemKind::Fn(f),
+            span: Span::new(0, 1),
+        }];
+        let diags = check_items(&items);
+        assert!(diags.iter().any(|d| {
+            d.message.contains(
+                "cannot propagate error in a function that does not return an error union",
+            )
+        }));
+    }
+
+    #[test]
+    fn test_empty_check() {
+        assert!(check_items(&[]).is_empty());
     }
 }
 """)
