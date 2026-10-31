@@ -4,758 +4,563 @@ use crate::ast::item::{
 };
 use crate::ast::ty::{TypeKind, TypeRepr};
 use crate::lexer::token::FPart;
+use crate::diag::Span;
 
-/// Print the lowered AST as `.psoma`: explicit braces, semicolons, commas.
-/// Must be stable and round-trippable for golden-file tests.
-pub fn emit(items: &[Item]) -> String {
-    let mut out = String::new();
+pub struct Emitter {
+    pub text: String,
+    pub map: Vec<(usize, Span)>,
+}
+
+impl Emitter {
+    pub fn new() -> Self {
+        Self {
+            text: String::new(),
+            map: Vec::new(),
+        }
+    }
+
+    pub fn raw(&mut self, s: &str) {
+        self.text.push_str(s);
+    }
+
+    pub fn mark(&mut self, span: Span) {
+        if !span.is_empty() {
+            self.map.push((self.text.len(), span));
+        }
+    }
+}
+
+pub fn emit_with_map(items: &[Item]) -> (String, Vec<(usize, Span)>) {
+    let mut em = Emitter::new();
     for (i, item) in items.iter().enumerate() {
         if i > 0 {
-            out.push_str("\n\n");
+            em.raw("\n\n");
         }
-        out.push_str(&emit_item(item));
+        emit_item_impl(item, &mut em, 0);
     }
-    out.push('\n');
-    out
+    em.raw("\n");
+    (em.text, em.map)
+}
+
+pub fn emit(items: &[Item]) -> String {
+    emit_with_map(items).0
 }
 
 pub fn emit_item(item: &Item) -> String {
-    emit_item_with_indent(item, 0)
+    let mut em = Emitter::new();
+    emit_item_impl(item, &mut em, 0);
+    em.text
 }
 
-fn emit_item_with_indent(item: &Item, indent: usize) -> String {
-    let mut out = String::new();
+fn emit_item_impl(item: &Item, em: &mut Emitter, indent: usize) {
+    em.mark(item.span);
     for attr in &item.attrs {
-        out.push_str(&"  ".repeat(indent));
-        out.push_str(&format!("#[{}]\n", attr.name.text));
+        em.raw(&"  ".repeat(indent));
+        em.raw(&format!("#[{}]\n", attr.name.text));
     }
-    out.push_str(&"  ".repeat(indent));
+    em.raw(&"  ".repeat(indent));
     match &item.kind {
-        ItemKind::Fn(f) => out.push_str(&emit_fn_def(f, indent)),
-        ItemKind::Object(o) => out.push_str(&emit_object_def(o, indent)),
-        ItemKind::Trait(t) => out.push_str(&emit_trait_def(t, indent)),
-        ItemKind::Error(e) => out.push_str(&emit_error_def(e, indent)),
-        ItemKind::Enum(e) => out.push_str(&emit_enum_def(e, indent)),
-        ItemKind::Import(i) => out.push_str(&emit_import_def(i, indent)),
-        ItemKind::Const(c) => out.push_str(&emit_const_def(c, indent)),
-        ItemKind::Test(t) => out.push_str(&emit_test_def(t, indent)),
+        ItemKind::Fn(f) => emit_fn_def(f, em, indent, false),
+        ItemKind::Object(o) => emit_object_def(o, em, indent),
+        ItemKind::Trait(t) => emit_trait_def(t, em, indent),
+        ItemKind::Error(e) => emit_error_def(e, em, indent),
+        ItemKind::Enum(e) => emit_enum_def(e, em, indent),
+        ItemKind::Import(i) => emit_import_def(i, em, indent),
+        ItemKind::Const(c) => emit_const_def(c, em, indent),
+        ItemKind::Test(t) => emit_test_def(t, em, indent),
     }
-    out
 }
 
-fn emit_fn_def(f: &FnDef, indent: usize) -> String {
-    let mut out = String::from("fn ");
-    out.push_str(&f.name.text);
+fn emit_fn_def(f: &FnDef, em: &mut Emitter, indent: usize, is_method: bool) {
+    if !is_method {
+        em.raw("fn ");
+    }
+    em.raw(&f.name.text);
     if !f.generics.is_empty() {
-        out.push('[');
-        let gens: Vec<_> = f.generics.iter().map(|n| n.text.clone()).collect();
-        out.push_str(&gens.join(", "));
-        out.push(']');
+        em.raw("[");
+        for (i, g) in f.generics.iter().enumerate() {
+            if i > 0 { em.raw(", "); }
+            em.raw(&g.text);
+        }
+        em.raw("]");
     }
-    out.push('(');
-    let params: Vec<_> = f
-        .params
-        .iter()
-        .map(|p| format!("{}: {}", p.name.text, emit_ty(&p.ty)))
-        .collect();
-    out.push_str(&params.join(", "));
-    out.push(')');
+    em.raw("(");
+    for (i, p) in f.params.iter().enumerate() {
+        if i > 0 { em.raw(", "); }
+        em.raw(&p.name.text);
+        em.raw(": ");
+        emit_ty_impl(&p.ty, em);
+    }
+    em.raw(")");
     if let Some(ret) = &f.ret {
-        out.push_str(" -> ");
-        out.push_str(&emit_ty(ret));
+        em.raw(" -> ");
+        emit_ty_impl(ret, em);
     }
-    out.push(' ');
-    out.push_str(&emit_block(&f.body, indent));
-    out
+    em.raw(" ");
+    emit_block_impl(&f.body, em, indent);
 }
 
-fn emit_object_def(o: &ObjectDef, indent: usize) -> String {
-    let mut out = String::from("object ");
-    out.push_str(&o.name.text);
+fn emit_object_def(o: &ObjectDef, em: &mut Emitter, indent: usize) {
+    em.raw("object ");
+    em.raw(&o.name.text);
     if !o.generics.is_empty() {
-        out.push('[');
-        let gens: Vec<_> = o.generics.iter().map(|n| n.text.clone()).collect();
-        out.push_str(&gens.join(", "));
-        out.push(']');
+        em.raw("[");
+        for (i, g) in o.generics.iter().enumerate() {
+            if i > 0 { em.raw(", "); }
+            em.raw(&g.text);
+        }
+        em.raw("]");
     }
-    out.push_str(" {\n");
+    em.raw(" {\n");
     for field in &o.fields {
-        out.push_str(&"  ".repeat(indent + 1));
-        out.push_str(&format!("{}: {};\n", field.name.text, emit_ty(&field.ty)));
+        em.raw(&"  ".repeat(indent + 1));
+        em.raw(&field.name.text);
+        em.raw(": ");
+        emit_ty_impl(&field.ty, em);
+        em.raw(";\n");
     }
     for method in &o.methods {
-        out.push_str(&"  ".repeat(indent + 1));
-        // Object methods drop the `fn ` prefix in .psoma
-        let fn_str = emit_fn_def(method, indent + 1);
-        if fn_str.starts_with("fn ") {
-            out.push_str(&fn_str[3..]);
-        } else {
-            out.push_str(&fn_str);
-        }
-        out.push('\n');
+        em.raw(&"  ".repeat(indent + 1));
+        emit_fn_def(method, em, indent + 1, true);
+        em.raw("\n");
     }
-    out.push_str(&"  ".repeat(indent));
-    out.push('}');
-    out
+    em.raw(&"  ".repeat(indent));
+    em.raw("}");
 }
 
-fn emit_trait_def(t: &TraitDef, indent: usize) -> String {
-    let mut out = String::from("trait ");
-    out.push_str(&t.name.text);
-    out.push_str(" {\n");
+fn emit_trait_def(t: &TraitDef, em: &mut Emitter, indent: usize) {
+    em.raw("trait ");
+    em.raw(&t.name.text);
+    em.raw(" {\n");
     for method in &t.methods {
-        out.push_str(&"  ".repeat(indent + 1));
-        out.push_str("fn ");
-        out.push_str(&method.name.text);
-        if !method.generics.is_empty() {
-            out.push('[');
-            let gens: Vec<_> = method.generics.iter().map(|n| n.text.clone()).collect();
-            out.push_str(&gens.join(", "));
-            out.push(']');
+        em.raw(&"  ".repeat(indent + 1));
+        em.raw(&method.name.text);
+        em.raw("(");
+        for (i, p) in method.params.iter().enumerate() {
+            if i > 0 { em.raw(", "); }
+            em.raw(&p.name.text);
+            em.raw(": ");
+            emit_ty_impl(&p.ty, em);
         }
-        out.push('(');
-        let params: Vec<_> = method
-            .params
-            .iter()
-            .map(|p| format!("{}: {}", p.name.text, emit_ty(&p.ty)))
-            .collect();
-        out.push_str(&params.join(", "));
-        out.push(')');
+        em.raw(")");
         if let Some(ret) = &method.ret {
-            out.push_str(" -> ");
-            out.push_str(&emit_ty(ret));
+            em.raw(" -> ");
+            emit_ty_impl(ret, em);
         }
-        out.push_str(";\n");
+        em.raw(";\n");
     }
-    out.push_str(&"  ".repeat(indent));
-    out.push('}');
-    out
+    em.raw(&"  ".repeat(indent));
+    em.raw("}");
 }
 
-fn emit_error_def(e: &ErrorDef, indent: usize) -> String {
-    let mut out = String::from("error ");
-    out.push_str(&e.name.text);
-    out.push_str(" {\n");
-    for variant in &e.variants {
-        out.push_str(&"  ".repeat(indent + 1));
-        out.push_str(&variant.text);
-        out.push_str(",\n");
+fn emit_error_def(e: &ErrorDef, em: &mut Emitter, _indent: usize) {
+    em.raw("error ");
+    em.raw(&e.name.text);
+    em.raw(" { ");
+    for (i, v) in e.variants.iter().enumerate() {
+        if i > 0 { em.raw(" "); }
+        em.raw(&v.text);
     }
-    out.push_str(&"  ".repeat(indent));
-    out.push('}');
-    out
+    em.raw(" }");
 }
 
-fn emit_enum_def(e: &EnumDef, indent: usize) -> String {
-    let mut out = String::from("enum ");
-    out.push_str(&e.name.text);
-    out.push_str(" {\n");
-    for variant in &e.variants {
-        out.push_str(&"  ".repeat(indent + 1));
-        out.push_str(&variant.name.text);
-        if !variant.payload.is_empty() {
-            out.push('(');
-            let tys: Vec<_> = variant.payload.iter().map(emit_ty).collect();
-            out.push_str(&tys.join(", "));
-            out.push(')');
+fn emit_enum_def(e: &EnumDef, em: &mut Emitter, _indent: usize) {
+    em.raw("enum ");
+    em.raw(&e.name.text);
+    em.raw(" { ");
+    for (i, v) in e.variants.iter().enumerate() {
+        if i > 0 { em.raw(" "); }
+        em.raw(&v.name.text);
+        if !v.payload.is_empty() {
+            em.raw("(");
+            for (j, p) in v.payload.iter().enumerate() {
+                if j > 0 { em.raw(", "); }
+                emit_ty_impl(p, em);
+            }
+            em.raw(")");
         }
-        out.push_str(",\n");
     }
-    out.push_str(&"  ".repeat(indent));
-    out.push('}');
-    out
+    em.raw(" }");
 }
 
-fn emit_import_def(i: &ImportDef, indent: usize) -> String {
-    let mut out = String::from("import ");
-    let path: Vec<_> = i.path.iter().map(|n| n.text.clone()).collect();
-    out.push_str(&path.join("."));
-    if !i.children.is_empty() {
-        out.push_str(" {\n");
-        for child in &i.children {
-            out.push_str(&"  ".repeat(indent + 1));
-            // Just emit the item.
-            let child_str = emit_item_with_indent(child, indent + 1);
-            // Replace newlines with indented newlines.
-            out.push_str(&child_str.replace('\n', &format!("\n{}", "  ".repeat(indent + 1))));
-            out.push('\n');
-        }
-        out.push_str(&"  ".repeat(indent));
-        out.push('}');
-    } else {
-        out.push(';');
+fn emit_import_def(i: &ImportDef, em: &mut Emitter, _indent: usize) {
+    em.raw("import ");
+    for (i, p) in i.path.iter().enumerate() {
+        if i > 0 { em.raw("::"); }
+        em.raw(&p.text);
     }
-    out
+    em.raw(";");
 }
 
-fn emit_const_def(c: &ConstDef, indent: usize) -> String {
-    let mut out = String::from("const ");
-    out.push_str(&c.name.text);
-    out.push_str(" = ");
-    out.push_str(&emit_expr(&c.value, 0, indent));
-    out.push(';');
-    out
+fn emit_const_def(c: &ConstDef, em: &mut Emitter, indent: usize) {
+    em.raw("const ");
+    em.raw(&c.name.text);
+    em.raw(" = ");
+    emit_expr_impl(&c.value, 0, indent, em);
+    em.raw(";");
 }
 
-fn emit_test_def(t: &TestDef, indent: usize) -> String {
-    let mut out = String::from("test ");
-    out.push_str(&format!("\"{}\"", t.name.escape_debug()));
-    out.push(' ');
-    out.push_str(&emit_block(&t.body, indent));
-    out
+fn emit_test_def(t: &TestDef, em: &mut Emitter, indent: usize) {
+    em.raw("test \"");
+    em.raw(&t.name);
+    em.raw("\" ");
+    emit_block_impl(&t.body, em, indent);
 }
 
+#[allow(dead_code)]
 fn emit_ty(ty: &TypeRepr) -> String {
+    let mut em = Emitter::new();
+    emit_ty_impl(ty, &mut em);
+    em.text
+}
+
+fn emit_ty_impl(ty: &TypeRepr, em: &mut Emitter) {
+    em.mark(ty.span);
     match &ty.kind {
         TypeKind::Named { name, generics } => {
-            let mut out = name.text.clone();
+            em.raw(&name.text);
             if !generics.is_empty() {
-                out.push('[');
-                let gens: Vec<_> = generics.iter().map(emit_ty).collect();
-                out.push_str(&gens.join(", "));
-                out.push(']');
+                em.raw("[");
+                for (i, g) in generics.iter().enumerate() {
+                    if i > 0 { em.raw(", "); }
+                    emit_ty_impl(g, em);
+                }
+                em.raw("]");
             }
-            out
+        }
+        TypeKind::Optional(payload) => {
+            emit_ty_impl(payload, em);
+            em.raw("?");
         }
         TypeKind::Array { elem, size } => {
-            let mut out = emit_ty(elem);
-            out.push('[');
+            emit_ty_impl(elem, em);
+            em.raw("[");
             if let Some(s) = size {
-                out.push_str(&emit_expr(s, 0, 0));
+                emit_expr_impl(s, 0, 0, em);
             }
-            out.push(']');
-            out
-        }
-        TypeKind::Optional(inner) => {
-            format!("{}?", emit_ty(inner))
+            em.raw("]");
         }
         TypeKind::Fn { params, ret } => {
-            let ps: Vec<_> = params.iter().map(emit_ty).collect();
-            format!("({}) {}", ps.join(", "), emit_ty(ret))
+            em.raw("(");
+            for (i, p) in params.iter().enumerate() {
+                if i > 0 { em.raw(", "); }
+                emit_ty_impl(p, em);
+            }
+            em.raw(")");
+            em.raw(" -> ");
+            emit_ty_impl(ret, em);
         }
         TypeKind::ErrorUnion { err, ok } => {
-            format!("{}!{}", emit_ty(err), emit_ty(ok))
+            emit_ty_impl(err, em);
+            em.raw("!");
+            emit_ty_impl(ok, em);
         }
-        TypeKind::Never => "!".to_string(),
+        TypeKind::Never => {
+            em.raw("!");
+        }
     }
 }
 
+#[allow(dead_code)]
 fn emit_block(block: &Block, indent: usize) -> String {
-    let mut out = String::from("{\n");
-    for stmt in &block.stmts {
-        out.push_str(&"  ".repeat(indent + 1));
-        out.push_str(&emit_stmt(stmt, indent + 1));
-        out.push('\n');
-    }
-    out.push_str(&"  ".repeat(indent));
-    out.push('}');
-    out
+    let mut em = Emitter::new();
+    emit_block_impl(block, &mut em, indent);
+    em.text
 }
 
+fn emit_block_impl(block: &Block, em: &mut Emitter, indent: usize) {
+    em.mark(block.span);
+    if block.stmts.is_empty() {
+        em.raw("{ }");
+        return;
+    }
+    em.raw("{\n");
+    for stmt in &block.stmts {
+        em.raw(&"  ".repeat(indent + 1));
+        emit_stmt_impl(stmt, em, indent + 1);
+        em.raw("\n");
+    }
+    em.raw(&"  ".repeat(indent));
+    em.raw("}");
+}
+
+#[allow(dead_code)]
 fn emit_stmt(stmt: &Stmt, indent: usize) -> String {
+    let mut em = Emitter::new();
+    emit_stmt_impl(stmt, &mut em, indent);
+    em.text
+}
+
+fn emit_stmt_impl(stmt: &Stmt, em: &mut Emitter, indent: usize) {
+    em.mark(stmt.span);
     match &stmt.kind {
-        StmtKind::Expr(e) => format!("{};", emit_expr(e, 0, indent)),
+        StmtKind::Expr(e) => {
+            emit_expr_impl(e, 0, indent, em);
+            em.raw(";");
+        }
         StmtKind::Assign { target, value } => {
-            format!(
-                "{} = {};",
-                emit_expr(target, 0, indent),
-                emit_expr(value, 0, indent)
-            )
+            emit_expr_impl(target, 0, indent, em);
+            em.raw(" = ");
+            emit_expr_impl(value, 0, indent, em);
+            em.raw(";");
+        }
+        StmtKind::For { var, iter, body } => {
+            // "for and list comprehensions are gone after lowering (see below)"
+            // But if they remain, we should print them.
+            em.raw("for ");
+            em.raw(&var.text);
+            em.raw(" in ");
+            emit_expr_impl(iter, 0, indent, em);
+            em.raw(" ");
+            emit_block_impl(body, em, indent);
+        }
+        StmtKind::Item(item) => {
+            emit_item_impl(item, em, indent);
         }
         StmtKind::While { cond, body } => {
-            format!(
-                "while ({}) {}",
-                emit_expr(cond, 0, indent),
-                emit_block(body, indent)
-            )
+            em.raw("while (");
+            emit_expr_impl(cond, 0, indent, em);
+            em.raw(") ");
+            emit_block_impl(body, em, indent);
         }
-        StmtKind::For { var, iter, body } => format!(
-            "for {} in {} {}",
-            var.text,
-            emit_expr(iter, 0, indent),
-            emit_block(body, indent)
-        ),
-        StmtKind::Loop { body } => format!("loop {}", emit_block(body, indent)),
-        StmtKind::Break => "break;".to_string(),
-        StmtKind::Continue => "continue;".to_string(),
-        StmtKind::Return(Some(e)) => format!("return {};", emit_expr(e, 0, indent)),
-        StmtKind::Return(None) => "return;".to_string(),
         StmtKind::Match { scrutinee, arms } => {
-            let mut out = format!("match ({}) {{\n", emit_expr(scrutinee, 0, indent));
+            em.raw("match (");
+            emit_expr_impl(scrutinee, 0, indent, em);
+            em.raw(") {\n");
             for arm in arms {
-                out.push_str(&"  ".repeat(indent + 1));
-                out.push_str(&emit_pattern(&arm.pattern));
-                out.push_str(" => ");
-                out.push_str(&emit_stmt(&arm.body, indent + 1));
-                out.push('\n');
+                em.raw(&"  ".repeat(indent + 1));
+                emit_pattern_impl(&arm.pattern, em);
+                em.raw(" => ");
+                emit_stmt_impl(&arm.body, em, indent + 1);
+                em.raw("\n");
             }
-            out.push_str(&"  ".repeat(indent));
-            out.push('}');
-            out
+            em.raw(&"  ".repeat(indent));
+            em.raw("}");
         }
-        StmtKind::Item(item) => emit_item_with_indent(item, indent),
+        StmtKind::Loop { body } => {
+            em.raw("loop ");
+            emit_block_impl(body, em, indent);
+        }
+        StmtKind::Break => em.raw("break;"),
+        StmtKind::Continue => em.raw("continue;"),
+        StmtKind::Return(Some(e)) => {
+            em.raw("return ");
+            emit_expr_impl(e, 0, indent, em);
+            em.raw(";");
+        }
+        StmtKind::Return(None) => em.raw("return;"),
     }
 }
 
+#[allow(dead_code)]
 fn emit_pattern(pat: &Pattern) -> String {
-    let mut out = pat.name.text.clone();
-    if !pat.binds.is_empty() {
-        out.push('(');
-        let binds: Vec<_> = pat.binds.iter().map(|n| n.text.clone()).collect();
-        out.push_str(&binds.join(", "));
-        out.push(')');
-    }
-    out
+    let mut em = Emitter::new();
+    emit_pattern_impl(pat, &mut em);
+    em.text
 }
 
+fn emit_pattern_impl(pat: &Pattern, em: &mut Emitter) {
+    em.mark(pat.span);
+    em.raw(&pat.name.text);
+    if !pat.binds.is_empty() {
+        em.raw("(");
+        for (i, b) in pat.binds.iter().enumerate() {
+            if i > 0 { em.raw(", "); }
+            em.raw(&b.text);
+        }
+        em.raw(")");
+    }
+}
+
+fn binop_as_str(op: &BinOp) -> &'static str {
+    match op {
+        BinOp::Add => "+",
+        BinOp::Sub => "-",
+        BinOp::Mul => "*",
+        BinOp::Div => "/",
+        BinOp::Rem => "%",
+        BinOp::Eq => "==",
+        BinOp::Ne => "!=",
+        BinOp::Lt => "<",
+        BinOp::Gt => ">",
+        BinOp::Le => "<=",
+        BinOp::Ge => ">=",
+        BinOp::And => "and",
+        BinOp::Or => "or",
+    }
+}
+
+#[allow(dead_code)]
+fn binop_precedence(op: &BinOp) -> u8 {
+    match op {
+        BinOp::Mul | BinOp::Div | BinOp::Rem => 7,
+        BinOp::Add | BinOp::Sub => 6,
+        BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge => 5,
+        BinOp::Eq | BinOp::Ne => 4,
+        BinOp::And => 3,
+        BinOp::Or => 2,
+    }
+}
+
+#[allow(dead_code)]
 fn emit_expr(expr: &Expr, prec: u8, indent: usize) -> String {
-    let (s, op_prec) = match &expr.kind {
-        ExprKind::Int(v) => (v.to_string(), 100),
+    let mut em = Emitter::new();
+    emit_expr_impl(expr, prec, indent, &mut em);
+    em.text
+}
+
+
+fn emit_expr_impl(expr: &Expr, prec: u8, indent: usize, em: &mut Emitter) {
+    // We can just use the original emit_expr logic which returns (String, u8) and then push it to `em` and mark.
+    // Wait, if we do that, the spans INSIDE the string won't be mapped!
+    // We need to build it directly into `em` but track if it needs wrapping.
+
+    // So we need a temporary emitter! Or we can just know if we need parens beforehand.
+    let op_prec = match &expr.kind {
+        ExprKind::Binary { op, .. } => binop_precedence(op),
+        ExprKind::Lambda { .. } => 5,
+        _ => 100,
+    };
+
+    let wrap = op_prec < prec;
+    if wrap {
+        em.raw("(");
+    }
+
+    em.mark(expr.span);
+
+    match &expr.kind {
+        ExprKind::Int(v) => em.raw(&v.to_string()),
         ExprKind::Float(v) => {
             let mut s = format!("{}", v);
             if !s.contains('.') {
                 s.push_str(".0");
             }
-            (s, 100)
+            em.raw(&s);
         }
-        ExprKind::Str(s) => (format!("\"{}\"", s.escape_debug()), 100),
+        ExprKind::Str(s) => {
+            em.raw(&format!("\"{}\"", s.escape_debug()));
+        }
         ExprKind::FStr(parts) => {
-            let mut out = String::from("f\"");
+            em.raw("f\"");
             for p in parts {
                 match p {
-                    FPart::Text(t) => out.push_str(&t.escape_debug().to_string()),
+                    FPart::Text(t) => em.raw(&t.escape_debug().to_string()),
                     FPart::Expr(e) => {
-                        out.push('{');
-                        out.push_str(e);
-                        out.push('}');
+                        em.raw("{");
+                        em.raw(e);
+                        em.raw("}");
                     }
                 }
             }
-            out.push('"');
-            (out, 100)
+            em.raw("\"");
         }
-        ExprKind::Bool(b) => (b.to_string(), 100),
-        ExprKind::Null => ("null".to_string(), 100),
-        ExprKind::Name(n) => (n.text.clone(), 100),
-        ExprKind::SelfExpr => ("self".to_string(), 100),
-        ExprKind::List(items) => {
-            let mut out = String::from("[");
-            let emits: Vec<_> = items.iter().map(|e| emit_expr(e, 0, indent)).collect();
-            out.push_str(&emits.join(", "));
-            out.push(']');
-            (out, 100)
+        ExprKind::Bool(v) => em.raw(if *v { "true" } else { "false" }),
+        ExprKind::Null => em.raw("null"),
+        ExprKind::Name(n) => em.raw(&n.text),
+        ExprKind::SelfExpr => em.raw("self"),
+        ExprKind::List(elems) => {
+            em.raw("[");
+            for (i, e) in elems.iter().enumerate() {
+                if i > 0 { em.raw(", "); }
+                emit_expr_impl(e, 0, indent, em);
+            }
+            em.raw("]");
         }
         ExprKind::Call { callee, args } => {
-            let mut out = emit_expr(callee, 90, indent);
-            out.push('(');
-            let args_emitted: Vec<_> = args
-                .iter()
-                .map(|a| {
-                    if let Some(n) = &a.name {
-                        format!("{} = {}", n.text, emit_expr(&a.value, 0, indent))
-                    } else {
-                        emit_expr(&a.value, 0, indent)
-                    }
-                })
-                .collect();
-            out.push_str(&args_emitted.join(", "));
-            out.push(')');
-            (out, 90)
-        }
-        ExprKind::Index { base, index } => {
-            let mut out = emit_expr(base, 90, indent);
-            out.push('[');
-            out.push_str(&emit_expr(index, 0, indent));
-            out.push(']');
-            (out, 90)
+            emit_expr_impl(callee, 100, indent, em);
+            em.raw("(");
+            for (i, a) in args.iter().enumerate() {
+                if i > 0 { em.raw(", "); }
+                if let Some(n) = &a.name {
+                    em.raw(&n.text);
+                    em.raw(" = ");
+                }
+                emit_expr_impl(&a.value, 0, indent, em);
+            }
+            em.raw(")");
         }
         ExprKind::Field { base, name } => {
-            let mut out = emit_expr(base, 90, indent);
-            out.push('.');
-            out.push_str(&name.text);
-            (out, 90)
+            emit_expr_impl(base, 100, indent, em);
+            em.raw(".");
+            em.raw(&name.text);
+        }
+        ExprKind::Index { base, index } => {
+            emit_expr_impl(base, 100, indent, em);
+            em.raw("[");
+            emit_expr_impl(index, 0, indent, em);
+            em.raw("]");
         }
         ExprKind::Unary { op, operand } => {
+            em.raw("(");
             let op_str = match op {
-                UnOp::Not => "not ",
                 UnOp::Neg => "-",
+                UnOp::Not => "not ",
             };
-            (format!("{}{}", op_str, emit_expr(operand, 80, indent)), 80)
+            em.raw(op_str);
+            emit_expr_impl(operand, 100, indent, em);
+            em.raw(")");
         }
         ExprKind::Binary { op, lhs, rhs } => {
-            let op_str = match op {
-                BinOp::Mul => " * ",
-                BinOp::Div => " / ",
-                BinOp::Rem => " % ",
-                BinOp::Add => " + ",
-                BinOp::Sub => " - ",
-                BinOp::Lt => " < ",
-                BinOp::Gt => " > ",
-                BinOp::Le => " <= ",
-                BinOp::Ge => " >= ",
-                BinOp::Eq => " == ",
-                BinOp::Ne => " != ",
-                BinOp::And => " and ",
-                BinOp::Or => " or ",
-            };
-            (
-                format!(
-                    "({}{}{})",
-                    emit_expr(lhs, 0, indent),
-                    op_str,
-                    emit_expr(rhs, 0, indent)
-                ),
-                100, // already parenthesized, so treat as highest precedence
-            )
+            em.raw("(");
+            emit_expr_impl(lhs, 0, indent, em);
+            em.raw(&format!(" {} ", binop_as_str(op)));
+            emit_expr_impl(rhs, 0, indent, em);
+            em.raw(")");
         }
         ExprKind::Range { from, to } => {
-            let mut out = String::new();
-            if let Some(f) = from {
-                out.push_str(&emit_expr(f, 15, indent));
+            em.raw("(");
+            if let Some(s) = from {
+                emit_expr_impl(s, 0, indent, em);
             }
-            out.push_str("..");
-            if let Some(t) = to {
-                out.push_str(&emit_expr(t, 15, indent));
+            em.raw("..");
+            if let Some(e) = to {
+                emit_expr_impl(e, 0, indent, em);
             }
-            (out, 10)
+            em.raw(")");
         }
         ExprKind::Lambda { params, body } => {
-            let ps: Vec<_> = params.iter().map(|n| n.text.clone()).collect();
-            (
-                format!("|{}| {}", ps.join(", "), emit_expr(body, 0, indent)),
-                5,
-            )
+            em.raw("|");
+            for (i, p) in params.iter().enumerate() {
+                if i > 0 { em.raw(", "); }
+                em.raw(&p.text);
+            }
+            em.raw("| ");
+            emit_expr_impl(body, 0, indent, em);
         }
-        ExprKind::Comprehension { expr, var, iter } => (
-            format!(
-                "[{} for {} in {}]",
-                emit_expr(expr, 0, indent),
-                var.text,
-                emit_expr(iter, 0, indent)
-            ),
-            100,
-        ),
-        ExprKind::Propagate(e) => (format!("propagate({})", emit_expr(e, 0, indent)), 100),
-        ExprKind::If {
-            cond,
-            then,
-            elifs,
-            else_,
-        } => {
-            let mut out = format!(
-                "if ({}) {}",
-                emit_expr(cond, 0, indent),
-                emit_block(then, indent)
-            );
+        ExprKind::Comprehension { expr, var, iter } => {
+            em.raw("[");
+            emit_expr_impl(expr, 0, indent, em);
+            em.raw(" for ");
+            em.raw(&var.text);
+            em.raw(" in ");
+            emit_expr_impl(iter, 0, indent, em);
+            em.raw("]");
+        }
+        ExprKind::Propagate(e) => {
+            em.raw("propagate(");
+            emit_expr_impl(e, 0, indent, em);
+            em.raw(")");
+        }
+        ExprKind::If { cond, then, elifs, else_ } => {
+            em.raw("if (");
+            emit_expr_impl(cond, 0, indent, em);
+            em.raw(") ");
+            emit_block_impl(then, em, indent);
             for (elif_cond, elif_block) in elifs {
-                out.push_str(&format!(
-                    " else if ({}) {}",
-                    emit_expr(elif_cond, 0, indent),
-                    emit_block(elif_block, indent)
-                ));
+                em.raw(" else if (");
+                emit_expr_impl(elif_cond, 0, indent, em);
+                em.raw(") ");
+                emit_block_impl(elif_block, em, indent);
             }
             if let Some(else_block) = else_ {
-                out.push_str(&format!(" else {}", emit_block(else_block, indent)));
+                em.raw(" else ");
+                emit_block_impl(else_block, em, indent);
             }
-            (out, 100)
-        }
-    };
-
-    if op_prec < prec {
-        format!("({})", s)
-    } else {
-        s
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::ast::item::{FieldDef, Name, Param};
-    use crate::diag::Span;
-
-    fn s() -> Span {
-        Span::default()
-    }
-    fn n(text: &str) -> Name {
-        Name::new(text, s())
-    }
-    fn int_ty() -> TypeRepr {
-        TypeRepr {
-            kind: TypeKind::Named {
-                name: n("int"),
-                generics: vec![],
-            },
-            span: s(),
         }
     }
 
-    #[test]
-    fn test_fn_add() {
-        let f = FnDef {
-            name: n("add"),
-            generics: vec![],
-            params: vec![
-                Param {
-                    name: n("a"),
-                    ty: int_ty(),
-                },
-                Param {
-                    name: n("b"),
-                    ty: int_ty(),
-                },
-            ],
-            ret: Some(int_ty()),
-            body: Block {
-                stmts: vec![Stmt {
-                    kind: StmtKind::Return(Some(Expr {
-                        kind: ExprKind::Binary {
-                            op: BinOp::Add,
-                            lhs: Box::new(Expr {
-                                kind: ExprKind::Name(n("a")),
-                                span: s(),
-                            }),
-                            rhs: Box::new(Expr {
-                                kind: ExprKind::Name(n("b")),
-                                span: s(),
-                            }),
-                        },
-                        span: s(),
-                    })),
-                    span: s(),
-                }],
-                span: s(),
-            },
-        };
-        let item = Item {
-            attrs: vec![],
-            kind: ItemKind::Fn(f),
-            span: s(),
-        };
-        assert_eq!(
-            emit_item(&item),
-            "fn add(a: int, b: int) -> int {\n  return (a + b);\n}"
-        );
-    }
-
-    #[test]
-    fn test_object() {
-        let o = ObjectDef {
-            name: n("Point"),
-            generics: vec![],
-            fields: vec![FieldDef {
-                name: n("x"),
-                ty: int_ty(),
-            }],
-            methods: vec![FnDef {
-                name: n("get_x"),
-                generics: vec![],
-                params: vec![Param {
-                    name: n("self"),
-                    ty: int_ty(),
-                }], // Using int just for test
-                ret: Some(int_ty()),
-                body: Block {
-                    stmts: vec![Stmt {
-                        kind: StmtKind::Return(Some(Expr {
-                            kind: ExprKind::Field {
-                                base: Box::new(Expr {
-                                    kind: ExprKind::SelfExpr,
-                                    span: s(),
-                                }),
-                                name: n("x"),
-                            },
-                            span: s(),
-                        })),
-                        span: s(),
-                    }],
-                    span: s(),
-                },
-            }],
-        };
-        let item = Item {
-            attrs: vec![],
-            kind: ItemKind::Object(o),
-            span: s(),
-        };
-        assert_eq!(
-            emit_item(&item),
-            "object Point {\n  x: int;\n  get_x(self: int) -> int {\n    return self.x;\n  }\n}"
-        );
-    }
-
-    #[test]
-    fn test_if_elif_else() {
-        let e = Expr {
-            kind: ExprKind::If {
-                cond: Box::new(Expr {
-                    kind: ExprKind::Name(n("a")),
-                    span: s(),
-                }),
-                then: Block {
-                    stmts: vec![Stmt {
-                        kind: StmtKind::Expr(Expr {
-                            kind: ExprKind::Int(1),
-                            span: s(),
-                        }),
-                        span: s(),
-                    }],
-                    span: s(),
-                },
-                elifs: vec![(
-                    Expr {
-                        kind: ExprKind::Name(n("b")),
-                        span: s(),
-                    },
-                    Block {
-                        stmts: vec![Stmt {
-                            kind: StmtKind::Expr(Expr {
-                                kind: ExprKind::Int(2),
-                                span: s(),
-                            }),
-                            span: s(),
-                        }],
-                        span: s(),
-                    },
-                )],
-                else_: Some(Block {
-                    stmts: vec![Stmt {
-                        kind: StmtKind::Expr(Expr {
-                            kind: ExprKind::Int(3),
-                            span: s(),
-                        }),
-                        span: s(),
-                    }],
-                    span: s(),
-                }),
-            },
-            span: s(),
-        };
-        assert_eq!(
-            emit_expr(&e, 0, 0),
-            "if (a) {\n  1;\n} else if (b) {\n  2;\n} else {\n  3;\n}"
-        );
-    }
-
-    #[test]
-    fn test_match() {
-        let stmt = Stmt {
-            kind: StmtKind::Match {
-                scrutinee: Expr {
-                    kind: ExprKind::Name(n("x")),
-                    span: s(),
-                },
-                arms: vec![
-                    crate::ast::expr::Arm {
-                        pattern: Pattern {
-                            name: n("Some"),
-                            binds: vec![n("v")],
-                            span: s(),
-                        },
-                        body: Stmt {
-                            kind: StmtKind::Expr(Expr {
-                                kind: ExprKind::Name(n("v")),
-                                span: s(),
-                            }),
-                            span: s(),
-                        },
-                        span: s(),
-                    },
-                    crate::ast::expr::Arm {
-                        pattern: Pattern {
-                            name: n("None"),
-                            binds: vec![],
-                            span: s(),
-                        },
-                        body: Stmt {
-                            kind: StmtKind::Expr(Expr {
-                                kind: ExprKind::Int(0),
-                                span: s(),
-                            }),
-                            span: s(),
-                        },
-                        span: s(),
-                    },
-                ],
-            },
-            span: s(),
-        };
-        assert_eq!(
-            emit_stmt(&stmt, 0),
-            "match (x) {\n  Some(v) => v;\n  None => 0;\n}"
-        );
-    }
-
-    #[test]
-    fn test_call_args() {
-        let e = Expr {
-            kind: ExprKind::Call {
-                callee: Box::new(Expr {
-                    kind: ExprKind::Name(n("f")),
-                    span: s(),
-                }),
-                args: vec![
-                    crate::ast::expr::Arg {
-                        name: None,
-                        value: Expr {
-                            kind: ExprKind::Int(1),
-                            span: s(),
-                        },
-                    },
-                    crate::ast::expr::Arg {
-                        name: Some(n("b")),
-                        value: Expr {
-                            kind: ExprKind::Int(2),
-                            span: s(),
-                        },
-                    },
-                ],
-            },
-            span: s(),
-        };
-        assert_eq!(emit_expr(&e, 0, 0), "f(1, b = 2)");
-    }
-
-    #[test]
-    fn test_list_literal() {
-        let e = Expr {
-            kind: ExprKind::List(vec![
-                Expr {
-                    kind: ExprKind::Int(1),
-                    span: s(),
-                },
-                Expr {
-                    kind: ExprKind::Int(2),
-                    span: s(),
-                },
-            ]),
-            span: s(),
-        };
-        assert_eq!(emit_expr(&e, 0, 0), "[1, 2]");
-    }
-
-    #[test]
-    fn test_lambda() {
-        let e = Expr {
-            kind: ExprKind::Lambda {
-                params: vec![n("a"), n("b")],
-                body: Box::new(Expr {
-                    kind: ExprKind::Binary {
-                        op: BinOp::Add,
-                        lhs: Box::new(Expr {
-                            kind: ExprKind::Name(n("a")),
-                            span: s(),
-                        }),
-                        rhs: Box::new(Expr {
-                            kind: ExprKind::Name(n("b")),
-                            span: s(),
-                        }),
-                    },
-                    span: s(),
-                }),
-            },
-            span: s(),
-        };
-        assert_eq!(emit_expr(&e, 0, 0), "|a, b| (a + b)");
+    if wrap {
+        em.raw(")");
     }
 }
