@@ -1,7 +1,7 @@
 //! Pipeline entry points used by the CLI and tests (owned by task 01).
 
 use crate::ast::item::Item;
-use crate::diag::{Diagnostic, ErrorKind, SourceMap};
+use crate::diag::{Diagnostic, SourceMap};
 
 pub struct Parsed {
     pub name: String,
@@ -12,9 +12,9 @@ pub struct Parsed {
 /// Lex + parse one source file. Returns a single diagnostic on failure.
 pub fn parse_source(name: &str, src: &str) -> Result<Parsed, Diagnostic> {
     let toks = crate::lexer::scan(src)
-        .map_err(|e| Diagnostic::new(ErrorKind::Lex, e.message, e.span))?;
+        .map_err(|e| Diagnostic::lex(e.message, e.span))?;
     let items = crate::parse::parse_file(&toks).map_err(|e| {
-        let d = Diagnostic::new(ErrorKind::Parse, e.message, e.span);
+        let d = Diagnostic::parse(e.message, e.span);
         if e.expected.is_empty() {
             d
         } else {
