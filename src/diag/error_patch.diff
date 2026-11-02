@@ -1,0 +1,35 @@
+<<<<<<< SEARCH
+    E0500, // match
+    E0501, // non-exhaustive
+}
+=======
+    E0500, // match
+    E0501, // non-exhaustive
+    E0901, // use after move
+    E0902, // double move
+}
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+            Self::E0500 => "E0500",
+            Self::E0501 => "E0501",
+        }
+=======
+            Self::E0500 => "E0500",
+            Self::E0501 => "E0501",
+            Self::E0901 => "E0901",
+            Self::E0902 => "E0902",
+        }
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+            "E0500" => Some(Self::E0500),
+            "E0501" => Some(Self::E0501),
+            _ => None,
+        }
+=======
+            "E0500" => Some(Self::E0500),
+            "E0501" => Some(Self::E0501),
+            "E0901" => Some(Self::E0901),
+            "E0902" => Some(Self::E0902),
+            _ => None,
+        }
+>>>>>>> REPLACE

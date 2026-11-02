@@ -1,0 +1,5 @@
+<<<<<<< SEARCH
+pub use error::{Diagnostic, ErrorKind};
+=======
+pub use error::{Diagnostic, ErrorKind, DiagCode};
+>>>>>>> REPLACE
