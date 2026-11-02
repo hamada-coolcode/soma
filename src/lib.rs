@@ -1,6 +1,9 @@
 pub mod ast;
 pub mod builtin;
 pub mod cli;
+pub mod cache;
+pub mod opt;
+pub mod repl;
 pub mod codegen;
 pub mod desugar;
 pub mod diag;

@@ -1,6 +1,8 @@
 //! Type checking (tasks 10-14).
 
 pub mod check_expr;
+pub mod check_error;
+pub mod check_trait;
 pub mod check_item;
 pub mod check_match;
 pub mod generic;
