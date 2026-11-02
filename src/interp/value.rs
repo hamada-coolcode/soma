@@ -19,6 +19,10 @@ pub enum Value {
     Func(Rc<FnDef>),
     Closure(Vec<String>, Box<Expr>, Rc<RefCell<Environment>>),
     Builtin(&'static str),
+    /// Object constructor (a type name used as a callable).
+    Ctor(String),
+    /// Method bound to its receiver: `c.area` becomes this, `c.area()` calls it.
+    BoundMethod(Rc<RefCell<BTreeMap<String, Value>>>, Rc<FnDef>),
     Iterator(Rc<RefCell<Vec<Value>>>, Rc<RefCell<usize>>),
 }
 
@@ -36,6 +40,8 @@ impl Value {
             Value::Variant(_, _) => "variant",
             Value::Iterator(..) => "iterator",
             Value::Func(_) | Value::Closure(..) | Value::Builtin(_) => "fn",
+            Value::Ctor(_) => "type",
+            Value::BoundMethod(..) => "method",
         }
     }
 }

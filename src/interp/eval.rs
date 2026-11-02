@@ -1,9 +1,9 @@
 use crate::ast::expr::{Expr, ExprKind, Block, Stmt, StmtKind, UnOp, BinOp};
-use crate::ast::item::{Item, ItemKind, FnDef};
+use crate::ast::item::{Item, ItemKind, FnDef, ObjectDef};
 use crate::diag::{Diagnostic, ErrorKind, Span};
 use crate::lexer::token::FPart;
 use super::value::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::cell::RefCell;
 
@@ -56,15 +56,25 @@ impl Environment {
 
 pub enum Flow {
     Normal,
+    /// Value of the last expression in a block (used by if/else expressions).
+    Value(Value),
     Return(Value),
     Break,
     Continue,
 }
 
 pub struct Evaluator {
+    /// A `return` executed inside an expression-position block.
+    pub pending_return: Option<Value>,
     pub env: Rc<RefCell<Environment>>,
     pub stdout: String,
     pub steps: usize,
+    /// Object definitions by type name, for construction and method dispatch.
+    pub objects: HashMap<String, ObjectDef>,
+    /// Variant names that belong to an `error` declaration.
+    pub error_variants: HashSet<String>,
+    /// Payload arity of every enum variant.
+    pub variant_arity: HashMap<String, usize>,
 }
 
 impl Evaluator {
@@ -73,15 +83,20 @@ impl Evaluator {
         env.borrow_mut().define("output".to_string(), Value::Builtin("output"));
         env.borrow_mut().define("input".to_string(), Value::Builtin("input"));
         env.borrow_mut().define("f".to_string(), Value::Builtin("f"));
+        env.borrow_mut().define("is_error".to_string(), Value::Builtin("is_error"));
 
         let mut env_obj = std::collections::BTreeMap::new();
         env_obj.insert("args".to_string(), Value::List(Rc::new(RefCell::new(vec![]))));
         env.borrow_mut().define("env".to_string(), Value::Object(Rc::new(RefCell::new(env_obj))));
 
         Self {
+            pending_return: None,
             env,
             stdout: String::new(),
             steps: 0,
+            objects: HashMap::new(),
+            error_variants: HashSet::from(["ParseError".to_string()]),
+            variant_arity: HashMap::new(),
         }
     }
 
@@ -111,9 +126,69 @@ impl Evaluator {
                 let val = self.eval_expr(&c.value)?;
                 self.env.borrow_mut().define(c.name.text.clone(), val);
             }
+            ItemKind::Object(o) => {
+                self.objects.insert(o.name.text.clone(), o.clone());
+                self.env
+                    .borrow_mut()
+                    .define(o.name.text.clone(), Value::Ctor(o.name.text.clone()));
+            }
+            ItemKind::Error(e) => {
+                for v in &e.variants {
+                    self.error_variants.insert(v.text.clone());
+                    self.variant_arity.insert(v.text.clone(), 0);
+                    self.env
+                        .borrow_mut()
+                        .define(v.text.clone(), Value::Variant(v.text.clone(), vec![]));
+                }
+            }
+            ItemKind::Enum(e) => {
+                for v in &e.variants {
+                    self.variant_arity.insert(v.name.text.clone(), v.payload.len());
+                    self.env
+                        .borrow_mut()
+                        .define(v.name.text.clone(), Value::Variant(v.name.text.clone(), vec![]));
+                }
+            }
+            ItemKind::Import(imp) => {
+                Self::register_import(&self.env, imp, &mut Vec::new());
+            }
             _ => {}
         }
         Ok(())
+    }
+
+    /// Bind imported leaf names to the builtins they name (`output`, `args`, ...).
+    fn register_import(
+        env: &Rc<RefCell<Environment>>,
+        imp: &crate::ast::item::ImportDef,
+        prefix: &mut Vec<String>,
+    ) {
+        for seg in &imp.path {
+            prefix.push(seg.text.clone());
+        }
+        if imp.children.is_empty() {
+            if let Some(leaf) = prefix.last() {
+                let canonical: Option<&'static str> = match leaf.as_str() {
+                    "output" => Some("output"),
+                    "input" => Some("input"),
+                    "args" => Some("args"),
+                    "choice" => Some("choice"),
+                    _ => None,
+                };
+                if let Some(name) = canonical {
+                    env.borrow_mut().define(leaf.clone(), Value::Builtin(name));
+                }
+            }
+        }
+        for child in &imp.children {
+            if let ItemKind::Import(inner) = &child.kind {
+                Self::register_import(env, inner, prefix);
+            }
+            while prefix.len() > 1 && prefix.last().map(|s| s.as_str()) != Some("") {
+                break;
+            }
+        }
+        let _ = prefix.pop();
     }
 
     pub fn call_main(&mut self) -> Result<(), Diagnostic> {
@@ -127,22 +202,37 @@ impl Evaluator {
     }
 
     pub fn eval_block(&mut self, block: &Block) -> Result<Flow, Diagnostic> {
+        let mut last = Value::Unit;
         for stmt in &block.stmts {
             let flow = self.eval_stmt(stmt)?;
             match flow {
-                Flow::Normal => continue,
-                _ => return Ok(flow),
+                Flow::Normal => {
+                    if let StmtKind::Expr(e) = &stmt.kind {
+                        // Re-evaluating would double side effects; the value is
+                        // captured through `last_value` instead.
+                        let _ = e;
+                    }
+                    continue;
+                }
+                Flow::Value(v) => {
+                    last = v;
+                    continue;
+                }
+                other => return Ok(other),
             }
         }
-        Ok(Flow::Normal)
+        Ok(Flow::Value(last))
     }
 
     pub fn eval_stmt(&mut self, stmt: &Stmt) -> Result<Flow, Diagnostic> {
         self.check_steps(stmt.span)?;
         match &stmt.kind {
             StmtKind::Expr(e) => {
-                self.eval_expr(e)?;
-                Ok(Flow::Normal)
+                let v = self.eval_expr(e)?;
+                if let Some(r) = self.pending_return.take() {
+                    return Ok(Flow::Return(r));
+                }
+                Ok(Flow::Value(v))
             }
             StmtKind::Assign { target, value } => {
                 let val = self.eval_expr(value)?;
@@ -198,8 +288,7 @@ impl Evaluator {
                             break;
                         }
                         match self.eval_block(body)? {
-                            Flow::Normal => continue,
-                            Flow::Continue => continue,
+                            Flow::Normal | Flow::Value(_) | Flow::Continue => continue,
                             Flow::Break => break,
                             Flow::Return(v) => return Ok(Flow::Return(v)),
                         }
@@ -213,8 +302,7 @@ impl Evaluator {
                 loop {
                     self.check_steps(stmt.span)?;
                     match self.eval_block(body)? {
-                        Flow::Normal => continue,
-                        Flow::Continue => continue,
+                        Flow::Normal | Flow::Value(_) | Flow::Continue => continue,
                         Flow::Break => break,
                         Flow::Return(v) => return Ok(Flow::Return(v)),
                     }
@@ -460,6 +548,17 @@ impl Evaluator {
                 }
             }
             ExprKind::Call { callee, args } => {
+                // Object construction needs argument names: `Circle(radius = 2.0)`.
+                if let ExprKind::Name(n) = &callee.kind {
+                    if matches!(self.env.borrow().get(&n.text), Some(Value::Ctor(_))) {
+                        let mut named = Vec::new();
+                        for arg in args {
+                            let v = self.eval_expr(&arg.value)?;
+                            named.push((arg.name.as_ref().map(|x| x.text.clone()), v));
+                        }
+                        return self.construct(&n.text, named, expr.span);
+                    }
+                }
                 let func = self.eval_expr(callee)?;
                 let mut eval_args = vec![];
                 for arg in args {
@@ -488,6 +587,39 @@ impl Evaluator {
                     }
                 }
 
+                // `Stack.new(...)` — `.new` on a type produces the constructor.
+                if let Value::Ctor(ty) = &b {
+                    // A user-declared `new` method wins over the implicit constructor.
+                    if let Some(def) = self.objects.get(ty) {
+                        if let Some(m) = def.methods.iter().find(|m| m.name.text == name.text) {
+                            let mut map = std::collections::BTreeMap::new();
+                            map.insert("__type".to_string(), Value::Str(ty.clone()));
+                            return Ok(Value::BoundMethod(
+                                Rc::new(RefCell::new(map)),
+                                Rc::new(m.clone()),
+                            ));
+                        }
+                    }
+                    if name.text == "new" {
+                        return Ok(Value::Ctor(ty.clone()));
+                    }
+                }
+
+                // Method dispatch: `c.area` on an object that declares `area`.
+                if let Value::Object(obj) = &b {
+                    let ty = obj.borrow().get("__type").and_then(|v| match v {
+                        Value::Str(s) => Some(s.clone()),
+                        _ => None,
+                    });
+                    if let Some(ty) = ty {
+                        if let Some(def) = self.objects.get(&ty) {
+                            if let Some(m) = def.methods.iter().find(|m| m.name.text == name.text) {
+                                return Ok(Value::BoundMethod(Rc::clone(obj), Rc::new(m.clone())));
+                            }
+                        }
+                    }
+                }
+
                 match (&b, name.text.as_str()) {
                     (Value::Str(s), "len") => {
                         Ok(Value::Closure(vec![], Box::new(Expr { kind: ExprKind::Null, span: expr.span }), Rc::new(RefCell::new({
@@ -495,6 +627,22 @@ impl Evaluator {
                             env.define("self_str".to_string(), Value::Str(s.clone()));
                             env.define("self_str_op".to_string(), Value::Str("len".to_string()));
                             env
+                        }))))
+                    }
+                    (Value::Str(s), "parse") => {
+                        let txt = s.clone();
+                        Ok(Value::Closure(vec![], Box::new(Expr { kind: ExprKind::Null, span: expr.span }), Rc::new(RefCell::new({
+                            let mut e = Environment::new();
+                            e.define("self_parse".to_string(), Value::Str(txt));
+                            e
+                        }))))
+                    }
+                    (Value::Str(s), "split") => {
+                        let txt = s.clone();
+                        Ok(Value::Closure(vec!["sep".to_string()], Box::new(Expr { kind: ExprKind::Null, span: expr.span }), Rc::new(RefCell::new({
+                            let mut e = Environment::new();
+                            e.define("self_split".to_string(), Value::Str(txt));
+                            e
                         }))))
                     }
                     (Value::Str(s), "contains") => {
@@ -511,6 +659,38 @@ impl Evaluator {
                             env.define("self_str".to_string(), Value::Str(s.clone()));
                             env.define("self_str_op".to_string(), Value::Str("lower".to_string()));
                             env
+                        }))))
+                    }
+                    (Value::List(l), "sort") => {
+                        Ok(Value::Closure(vec![], Box::new(Expr { kind: ExprKind::Null, span: expr.span }), Rc::new(RefCell::new({
+                            let mut e = Environment::new();
+                            e.define("self_list".to_string(), Value::List(Rc::clone(l)));
+                            e.define("self_list_op".to_string(), Value::Str("sort".to_string()));
+                            e
+                        }))))
+                    }
+                    (Value::List(l), "reduce") => {
+                        Ok(Value::Closure(vec!["init".to_string(), "f".to_string()], Box::new(Expr { kind: ExprKind::Null, span: expr.span }), Rc::new(RefCell::new({
+                            let mut e = Environment::new();
+                            e.define("self_list".to_string(), Value::List(Rc::clone(l)));
+                            e.define("self_list_op".to_string(), Value::Str("reduce".to_string()));
+                            e
+                        }))))
+                    }
+                    (Value::List(l), "filter") => {
+                        Ok(Value::Closure(vec!["f".to_string()], Box::new(Expr { kind: ExprKind::Null, span: expr.span }), Rc::new(RefCell::new({
+                            let mut e = Environment::new();
+                            e.define("self_list".to_string(), Value::List(Rc::clone(l)));
+                            e.define("self_list_op".to_string(), Value::Str("filter".to_string()));
+                            e
+                        }))))
+                    }
+                    (Value::List(l), "map") => {
+                        Ok(Value::Closure(vec!["f".to_string()], Box::new(Expr { kind: ExprKind::Null, span: expr.span }), Rc::new(RefCell::new({
+                            let mut e = Environment::new();
+                            e.define("self_list".to_string(), Value::List(Rc::clone(l)));
+                            e.define("self_list_op".to_string(), Value::Str("map".to_string()));
+                            e
                         }))))
                     }
                     (Value::List(l), "len") => {
@@ -542,6 +722,18 @@ impl Evaluator {
             }
             ExprKind::Index { base, index } => {
                 let b = self.eval_expr(base)?;
+                // `T[int]` is a type application, not a list index.
+                if matches!(
+                    b,
+                    Value::Ctor(_)
+                        | Value::Func(_)
+                        | Value::Builtin(_)
+                        | Value::Closure(..)
+                        | Value::BoundMethod(..)
+                ) && matches!(index.kind, ExprKind::Name(_))
+                {
+                    return Ok(b);
+                }
                 let i = self.eval_expr(index)?;
                 if let Value::List(l) = b {
                     if let Value::Int(idx) = i {
@@ -562,45 +754,171 @@ impl Evaluator {
                 Ok(Value::Closure(param_names, body.clone(), Rc::clone(&self.env)))
             }
             ExprKind::If { cond, then, elifs, else_ } => {
-                let c = self.eval_expr(cond)?;
-                if let Value::Bool(b) = c {
-                    if b {
-                        let _ = self.eval_block(then)?;
-                        return Ok(Value::Unit);
+                let flow = self.eval_if_flow(cond, then, elifs, else_.as_ref(), expr.span)?;
+                match flow {
+                    Flow::Return(v) => {
+                        self.pending_return = Some(v);
+                        Ok(Value::Unit)
                     }
-                } else {
-                    return Err(Diagnostic::new(ErrorKind::Other, "if condition must be bool", cond.span));
+                    Flow::Value(v) => Ok(v),
+                    _ => Ok(Value::Unit),
                 }
-
-                for (elif_cond, elif_then) in elifs {
-                    let c = self.eval_expr(elif_cond)?;
-                    if let Value::Bool(b) = c {
-                        if b {
-                            let _ = self.eval_block(elif_then)?;
-                            return Ok(Value::Unit);
-                        }
-                    } else {
-                        return Err(Diagnostic::new(ErrorKind::Other, "elif condition must be bool", elif_cond.span));
-                    }
-                }
-
-                if let Some(else_block) = else_ {
-                    let _ = self.eval_block(else_block)?;
-                }
-                Ok(Value::Unit)
             }
             ExprKind::Comprehension { .. } => Err(Diagnostic::new(ErrorKind::Other, "unlowered comprehension", expr.span)),
-            ExprKind::Range { .. } => Err(Diagnostic::new(ErrorKind::Other, "unsupported range", expr.span)),
+            ExprKind::Range { from, to } => {
+                let start = match from {
+                    Some(e) => match self.eval_expr(e)? {
+                        Value::Int(i) => i,
+                        _ => return Err(Diagnostic::new(ErrorKind::Other, "range bounds must be int", expr.span)),
+                    },
+                    None => 1,
+                };
+                let end = match to {
+                    Some(e) => match self.eval_expr(e)? {
+                        Value::Int(i) => i,
+                        _ => return Err(Diagnostic::new(ErrorKind::Other, "range bounds must be int", expr.span)),
+                    },
+                    None => return Err(Diagnostic::new(ErrorKind::Other, "open range needs an end", expr.span)),
+                };
+                let mut out = Vec::new();
+                let mut i = start;
+                while i < end {
+                    out.push(Value::Int(i));
+                    i += 1;
+                }
+                Ok(Value::List(Rc::new(RefCell::new(out))))
+            }
             ExprKind::Propagate(_) => Err(Diagnostic::new(ErrorKind::Other, "unsupported propagate", expr.span)),
         }
+    }
+
+    /// Evaluate an if/elif/else chain, preserving `return` and the value of the
+    /// chosen branch (so `x = if c => a else b` works after desugaring).
+    fn eval_if_flow(
+        &mut self,
+        cond: &Expr,
+        then: &Block,
+        elifs: &[(Expr, Block)],
+        else_: Option<&Block>,
+        _span: Span,
+    ) -> Result<Flow, Diagnostic> {
+        match self.eval_expr(cond)? {
+            Value::Bool(true) => return self.eval_block(then),
+            Value::Bool(false) => {}
+            _ => {
+                return Err(Diagnostic::new(
+                    ErrorKind::Other,
+                    "if condition must be bool",
+                    cond.span,
+                ))
+            }
+        }
+        for (elif_cond, elif_then) in elifs {
+            match self.eval_expr(elif_cond)? {
+                Value::Bool(true) => return self.eval_block(elif_then),
+                Value::Bool(false) => {}
+                _ => {
+                    return Err(Diagnostic::new(
+                        ErrorKind::Other,
+                        "elif condition must be bool",
+                        elif_cond.span,
+                    ))
+                }
+            }
+        }
+        match else_ {
+            Some(b) => self.eval_block(b),
+            None => Ok(Flow::Normal),
+        }
+    }
+
+    /// Build an object from `ObjectDef`, mapping named args to fields by name.
+    fn construct(
+        &mut self,
+        name: &str,
+        args: Vec<(Option<String>, Value)>,
+        span: Span,
+    ) -> Result<Value, Diagnostic> {
+        let def = match self.objects.get(name) {
+            Some(d) => d.clone(),
+            None => {
+                return Err(Diagnostic::new(
+                    ErrorKind::Other,
+                    format!("unknown type `{}`", name),
+                    span,
+                ))
+            }
+        };
+        let mut map = std::collections::BTreeMap::new();
+        map.insert("__type".to_string(), Value::Str(name.to_string()));
+        let mut positional = args.iter().filter(|(n, _)| n.is_none()).map(|(_, v)| v.clone());
+        for field in &def.fields {
+            let named = args
+                .iter()
+                .find(|(n, _)| n.as_deref() == Some(field.name.text.as_str()))
+                .map(|(_, v)| v.clone());
+            let val = match named {
+                Some(v) => v,
+                None => positional.next().unwrap_or(Value::Null),
+            };
+            map.insert(field.name.text.clone(), val);
+        }
+        Ok(Value::Object(Rc::new(RefCell::new(map))))
     }
 
     fn call_value(&mut self, callee: &Value, args: Vec<Value>, span: Span) -> Result<Value, Diagnostic> {
         match callee {
             Value::Func(f) => self.call_func(f, args, span),
+            Value::Ctor(name) => {
+                let named = args.into_iter().map(|v| (None, v)).collect();
+                self.construct(name, named, span)
+            }
+            Value::Variant(name, existing) => {
+                let mut all = existing.clone();
+                all.extend(args);
+                Ok(Value::Variant(name.clone(), all))
+            }
+            Value::BoundMethod(obj, f) => {
+                let mut call_env = Environment::with_parent(Rc::clone(&self.env));
+                call_env.define("self".to_string(), Value::Object(Rc::clone(obj)));
+                if let Some(Value::Str(ty)) = obj.borrow().get("__type").cloned() {
+                    call_env.define("Self".to_string(), Value::Ctor(ty));
+                }
+                for (i, p) in f.params.iter().enumerate() {
+                    if i < args.len() {
+                        call_env.define(p.name.text.clone(), args[i].clone());
+                    }
+                }
+                let old_env = Rc::clone(&self.env);
+                self.env = Rc::new(RefCell::new(call_env));
+                let flow = self.eval_block(&f.body);
+                self.env = old_env;
+                match flow? {
+                    Flow::Return(v) => Ok(v),
+                    _ => Ok(Value::Unit),
+                }
+            }
             Value::Closure(params, body, env) => {
                 if body.kind == ExprKind::Null {
                     let closure_env = env.borrow();
+                    if let Some(Value::Str(txt)) = closure_env.get("self_parse") {
+                        return match txt.trim().parse::<i64>() {
+                            Ok(i) => Ok(Value::Int(i)),
+                            Err(_) => match txt.trim().parse::<f64>() {
+                                Ok(f) => Ok(Value::Float(f)),
+                                Err(_) => Ok(Value::Variant("ParseError".to_string(), vec![])),
+                            },
+                        };
+                    }
+                    if let Some(Value::Str(txt)) = closure_env.get("self_split") {
+                        let sep = match args.first() {
+                            Some(Value::Str(s)) => s.clone(),
+                            _ => " ".to_string(),
+                        };
+                        let parts: Vec<Value> =
+                            txt.split(sep.as_str()).map(|p| Value::Str(p.to_string())).collect();
+                        return Ok(Value::List(Rc::new(RefCell::new(parts))));
+                    }
                     if let Some(Value::Str(s)) = closure_env.get("self_str") {
                         if let Some(Value::Str(op)) = closure_env.get("self_str_op") {
                             if op == "len" {
@@ -639,6 +957,22 @@ impl Evaluator {
                                 return Ok(Value::Int(l.borrow().len() as i64));
                             } else if op == "add" {
                                 l.borrow_mut().push(args[0].clone());
+                                return Ok(Value::Unit);
+                            } else if op == "reduce" {
+                                let init = args.first().cloned().unwrap_or(Value::Null);
+                                let f = args.get(1).cloned().unwrap_or(Value::Null);
+                                let items = l.borrow().clone();
+                                let mut acc = init;
+                                for it in items {
+                                    acc = self.call_value(&f, vec![acc, it], span)?;
+                                }
+                                return Ok(acc);
+                            } else if op == "sort" {
+                                l.borrow_mut().sort_by(|a, b| match (a, b) {
+                                    (Value::Int(x), Value::Int(y)) => x.cmp(y),
+                                    (Value::Str(x), Value::Str(y)) => x.cmp(y),
+                                    _ => std::cmp::Ordering::Equal,
+                                });
                                 return Ok(Value::Unit);
                             } else if op == "extend" {
                                 if let Value::List(other) = &args[0] {
@@ -702,6 +1036,29 @@ impl Evaluator {
                     "input" => {
                         Err(Diagnostic::new(ErrorKind::Other, "input is an error", span))
                     }
+                    "choice" => {
+                        let items = match args.first() {
+                            Some(Value::List(l)) => l.borrow().clone(),
+                            _ => Vec::new(),
+                        };
+                        if items.is_empty() {
+                            return Ok(Value::Null);
+                        }
+                        // Deterministic pick so runs are reproducible.
+                        let n = self.steps.wrapping_mul(6364136223846793005).wrapping_add(1);
+                        Ok(items[(n as usize >> 16) % items.len()].clone())
+                    }
+                    "args" => Ok(Value::List(Rc::new(RefCell::new(
+                        std::env::args().skip(1).map(Value::Str).collect(),
+                    )))),
+                    "is_error" => {
+                        let v = args.first().cloned().unwrap_or(Value::Null);
+                        let is = match &v {
+                            Value::Variant(n, _) => self.error_variants.contains(n),
+                            _ => false,
+                        };
+                        Ok(Value::Bool(is))
+                    }
                     "f" => {
                         if let Some(Value::Str(s)) = args.get(0) {
                             let mut res = String::new();
@@ -763,7 +1120,7 @@ impl Evaluator {
         let flow = self.eval_block(&f.body)?;
         self.env = old_env;
         match flow {
-            Flow::Return(v) => Ok(v),
+            Flow::Return(v) | Flow::Value(v) => Ok(v),
             _ => Ok(Value::Unit),
         }
     }
@@ -785,6 +1142,8 @@ impl Evaluator {
             Value::Func(f) => format!("<fn {}>", f.name.text),
             Value::Closure(..) => "<closure>".to_string(),
             Value::Builtin(n) => format!("<builtin {}>", n),
+            Value::Ctor(n) => format!("<type {}>", n),
+            Value::BoundMethod(..) => "<method>".to_string(),
             Value::Iterator(..) => "<iterator>".to_string(),
         }
     }
