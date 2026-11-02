@@ -14,6 +14,19 @@ pub struct SourceFile {
 }
 
 impl SourceMap {
+
+    pub fn map_psoma_span(mapping: &[(usize, Span)], offset: usize) -> Option<Span> {
+        let idx = match mapping.binary_search_by_key(&offset, |&(o, _)| o) {
+            Ok(i) => i,
+            Err(i) => {
+                if i == 0 {
+                    return None;
+                }
+                i - 1
+            }
+        };
+        Some(mapping[idx].1)
+    }
     pub fn new() -> Self {
         Self::default()
     }
