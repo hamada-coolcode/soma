@@ -123,6 +123,12 @@ impl<'a> ExprChecker<'a> {
             };
             return Err(Diagnostic::new(ErrorKind::Type, msg, span));
         }
+        // Unresolved receivers (type variables) defer field typing: the checker is
+        // not an inference engine, and `self.x` inside a method or a field on an
+        // imported/unknown value must not be a hard error.
+        if matches!(resolved, Type::Var(_)) {
+            return Ok(self.table.fresh_var());
+        }
         Err(Diagnostic::new(ErrorKind::Type, format!("[E0401] Cannot access field on type '{}'", self.table.display(&resolved)), base.span))
     }
 
