@@ -20,8 +20,5 @@ pub fn scan_op(_src: &str, _start: usize) -> Option<(Op, usize)> {
 
 /// Build an operator token over `[start, end)`.
 pub fn op_token(op: Op, start: usize, end: usize) -> Token {
-    Token::new(
-        super::TokKind::Op(op),
-        crate::diag::Span::new(start, end),
-    )
+    Token::new(super::TokKind::Op(op), crate::diag::Span::new(start, end))
 }
