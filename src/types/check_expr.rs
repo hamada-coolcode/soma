@@ -53,17 +53,14 @@ impl<'a> ExprChecker<'a> {
         }
     }
 
-    fn check_name(&mut self, name: &Name, span: Span) -> Result<TypeId, Diagnostic> {
-        if self.scope.lookup(&name.text).is_none() {
-            return Err(Diagnostic::new(ErrorKind::Type, format!("[E0402] Unknown name '{}'", name.text), span));
-        }
-
+    fn check_name(&mut self, name: &Name, _span: Span) -> Result<TypeId, Diagnostic> {
+        // Undefined-name reporting (E0302) belongs to the resolver. Globals, imports
+        // and builtins are not in the local env, so an unknown name yields a fresh
+        // type variable rather than a bogus E0402.
         if let Some(&ty) = self.env.get(&name.text) {
             Ok(ty)
         } else {
-            // Missing from env but present in scope implies it's a global or un-typed yet.
-            // But per task requirements we should not unwrap, instead return missing type diagnostic if un-typed.
-            Err(Diagnostic::new(ErrorKind::Type, format!("[E0403] Missing type for name '{}'", name.text), span))
+            Ok(self.table.fresh_var())
         }
     }
 

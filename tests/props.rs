@@ -165,7 +165,7 @@ fn test_fuzz_structured_mutants() {
 
 #[test]
 fn test_corpus_fuzz() {
-    let mut entries: Vec<_> = fs::read_dir("tests/corpus/fuzz")
+    let mut entries: Vec<_> = fs::read_dir("tests/fuzz_corpus")
         .unwrap()
         .map(|r| r.unwrap())
         .collect();
