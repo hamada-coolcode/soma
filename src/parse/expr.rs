@@ -21,21 +21,19 @@ fn kw_after_newlines(p: &mut Parser<'_>, kw: &str) -> bool {
 
 fn is_lambda_start(p: &Parser<'_>) -> bool {
     let mut pos = p.pos;
-    if let Some(TokKind::Ident(_)) = p.toks.get(pos).map(|t| &t.kind) {
-        if let Some(TokKind::Op(Op::FatArrow)) = p.toks.get(pos + 1).map(|t| &t.kind) {
+    if let Some(TokKind::Ident(_)) = p.toks.get(pos).map(|t| &t.kind)
+        && let Some(TokKind::Op(Op::FatArrow)) = p.toks.get(pos + 1).map(|t| &t.kind) {
             return true;
         }
-    }
     if let Some(TokKind::Op(Op::LParen)) = p.toks.get(pos).map(|t| &t.kind) {
         pos += 1;
         while let Some(TokKind::Ident(_)) = p.toks.get(pos).map(|t| &t.kind) {
             pos += 1;
         }
-        if let Some(TokKind::Op(Op::RParen)) = p.toks.get(pos).map(|t| &t.kind) {
-            if let Some(TokKind::Op(Op::FatArrow)) = p.toks.get(pos + 1).map(|t| &t.kind) {
+        if let Some(TokKind::Op(Op::RParen)) = p.toks.get(pos).map(|t| &t.kind)
+            && let Some(TokKind::Op(Op::FatArrow)) = p.toks.get(pos + 1).map(|t| &t.kind) {
                 return true;
             }
-        }
     }
     false
 }
@@ -448,12 +446,11 @@ fn parse_postfix(p: &mut Parser<'_>, lhs: Expr) -> Result<Expr, ParseError> {
         let mut args = Vec::new();
         while !p.check_op(Op::RParen) && !p.at_eof() {
             let mut name = None;
-            if let Some(TokKind::Ident(_)) = p.peek_kind() {
-                if let Some(TokKind::Op(Op::Assign)) = p.toks.get(p.pos + 1).map(|t| &t.kind) {
+            if let Some(TokKind::Ident(_)) = p.peek_kind()
+                && let Some(TokKind::Op(Op::Assign)) = p.toks.get(p.pos + 1).map(|t| &t.kind) {
                     name = Some(p.expect_ident()?);
                     p.bump();
                 }
-            }
             let saved = p.allow_lambda;
             p.allow_lambda = true;
             let value = expr(p, 0);
