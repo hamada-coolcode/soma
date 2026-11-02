@@ -14,6 +14,8 @@ pub enum DiagCode {
     E0403, // wrong arity
     E0500, // match
     E0501, // non-exhaustive
+    E0901, // use after move
+    E0902, // double move
 }
 
 impl DiagCode {
@@ -31,6 +33,8 @@ impl DiagCode {
             Self::E0403 => "E0403",
             Self::E0500 => "E0500",
             Self::E0501 => "E0501",
+            Self::E0901 => "E0901",
+            Self::E0902 => "E0902",
         }
     }
 
@@ -48,6 +52,8 @@ impl DiagCode {
             "E0403" => Some(Self::E0403),
             "E0500" => Some(Self::E0500),
             "E0501" => Some(Self::E0501),
+            "E0901" => Some(Self::E0901),
+            "E0902" => Some(Self::E0902),
             _ => None,
         }
     }
